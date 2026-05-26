@@ -1,0 +1,9 @@
+{
+    "blueprintId": "characters/classes/shaman",
+    "stats": {
+        "vitality": 3,
+        "intellect": 6,
+        "strength": 3,
+        "agility": 4
+    }
+}

@@ -1,0 +1,9 @@
+{
+    "blueprintId": "characters/classes/ninja",
+    "stats": {
+        "vitality": 3,
+        "intellect": 3,
+        "strength": 4,
+        "agility": 6
+    }
+}

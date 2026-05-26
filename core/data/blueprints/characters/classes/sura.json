@@ -1,0 +1,9 @@
+{
+    "blueprintId": "characters/classes/sura",
+    "stats": {
+        "vitality": 3,
+        "intellect": 5,
+        "strength": 5,
+        "agility": 3
+    }
+}

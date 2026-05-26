@@ -1,0 +1,9 @@
+{
+    "blueprintId": "characters/classes/warrior",
+    "stats": {
+        "vitality": 4,
+        "intellect": 3,
+        "strength": 6,
+        "agility": 3
+    }
+}
