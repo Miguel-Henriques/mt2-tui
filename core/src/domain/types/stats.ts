@@ -54,6 +54,10 @@ export interface PrimaryStats {
  * 
  * Secondary stats are absolute values that are not capped.
  * For items that increase physical/magic damage with absolutes, min and max should be set with the same value.
+ * 
+ * Permanent stat increases on level up: //TODO: Should be persisted in the database
+ * - HP per level: random 36-44
+ * - SP per level: random 18-22
  */
 export interface SecondaryStats {
     /**

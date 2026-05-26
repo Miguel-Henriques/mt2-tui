@@ -1,6 +1,8 @@
 {
     "blueprintId": "characters/classes/shaman",
     "stats": {
+        "healthPoints": 700,
+        "skillPoints": 200,
         "vitality": 3,
         "intellect": 6,
         "strength": 3,

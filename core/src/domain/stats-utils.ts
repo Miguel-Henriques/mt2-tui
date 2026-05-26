@@ -1,6 +1,6 @@
 import { CharacterClass } from "./types/characters.js";
 import { EquipmentItem } from "./types/items.js";
-import { PrimaryStats, SecondaryStats, Stats } from "./types/stats.js";
+import { OtherStats, PrimaryStats, SecondaryStats, Stats } from "./types/stats.js";
 
 export function calculateHp(baseHealthPoints: number, vitality: number, ...additionalHpSources: number[]) {
     return baseHealthPoints + (vitality * 40) + additionalHpSources.reduce((a, b) => a + b, 0);
@@ -53,5 +53,16 @@ export function calculateSecondaryStats(characterClass: CharacterClass, primaryS
         magicDamage: calculateMagicDamage(level, primaryStats.intellect!, gearStats.magicDamage ?? 0),
         physicalDefense: calculatePhysicalDefense(level, primaryStats.vitality!, gearStats.physicalDefense ?? 0),
         magicDefense: calculateMagicDefense(level, primaryStats.intellect!, primaryStats.vitality!, gearStats.magicDefense ?? 0)
+    }
+}
+
+//TODO:
+export function calculateOtherStats(): OtherStats {
+    return {
+        attackSpeed: 100,
+        movementSpeed: 100,
+        castingSpeed: 100,
+        damageReduction: 100,
+        cooldownReduction: 100
     }
 }

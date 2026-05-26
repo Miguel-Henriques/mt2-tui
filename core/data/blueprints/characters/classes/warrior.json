@@ -1,6 +1,8 @@
 {
     "blueprintId": "characters/classes/warrior",
     "stats": {
+        "healthPoints": 600,
+        "skillPoints": 200,
         "vitality": 4,
         "intellect": 3,
         "strength": 6,
