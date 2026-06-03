@@ -1,5 +1,2 @@
-- Create CRUD API
-- Create stats (extract online)
-- Create classes, items
 - Create stats calculator
 - Create stats simulator: 1v1 faceoff between 2 simulated characters

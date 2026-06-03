@@ -1,0 +1,19 @@
+{
+	"blueprintId": "items/weapons/sword+0",
+	"name": "Sword",
+	"description": "A basic sword with a wooden handle and a steel blade.",
+	"type": "weapon",
+	"subType": "sword",
+	"wearableClasses": [
+		"warrior",
+		"ninja",
+		"sura"
+	],
+	"wearableFromLevel": 1,
+	"baseStats": {
+		"physicalDamage": 13,
+		"magicDamage": 15,
+		"damageSpread": 4,
+		"attackSpeed": 22
+	}
+}

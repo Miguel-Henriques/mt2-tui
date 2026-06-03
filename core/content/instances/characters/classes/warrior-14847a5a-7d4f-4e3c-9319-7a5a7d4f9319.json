@@ -1,0 +1,13 @@
+{
+	"blueprintId": "characters/classes/warrior",
+	"stats": {
+		"vitality": 8,
+		"intellect": 3,
+		"strength": 14,
+		"agility": 3
+	},
+	"uid": "14847a5a-7d4f-4e3c-9319-7a5a7d4f9319",
+	"name": "KaTaRola",
+	"level": 5,
+	"experience": 0
+}

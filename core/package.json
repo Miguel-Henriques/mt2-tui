@@ -5,12 +5,21 @@
 	"type": "module",
 	"scripts": {
 		"build": "tsc",
-		"dev": "tsx watch src/index.ts",
-		"start": "node dist/index.js"
+		"api": "node dist/clients/api/index.js",
+		"dev:api": "tsx watch src/clients/api/index.ts",
+		"dev:tui": "tsx src/clients/tui/index.tsx",
+		"start": "node dist/clients/api/index.js",
+		"tui": "tsx src/clients/tui/index.tsx"
 	},
 	"dependencies": {
 		"@hono/node-server": "^1.14.1",
-		"hono": "^4.7.10"
+		"@hono/zod-openapi": "^1.4.0",
+		"@scalar/hono-api-reference": "^0.10.19",
+		"@types/react": "^19.2.16",
+		"hono": "^4.7.10",
+		"ink": "^7.0.5",
+		"react": "^19.2.7",
+		"zod": "^4.4.3"
 	},
 	"devDependencies": {
 		"@types/node": "^22.15.21",
