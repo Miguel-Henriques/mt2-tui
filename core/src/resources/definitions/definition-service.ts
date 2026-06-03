@@ -57,8 +57,7 @@ export const createDefinitionService = (
 
 		return definition
 	},
-	listCharacterClassDefinitions: () =>
-		repository.listCharacterClassDefinitions(),
+	listCharacterClassDefinitions: () => repository.listCharacterClassDefinitions(),
 	getCharacterClassDefinition: (defId) => {
 		const definition = repository.getCharacterClassDefinition(defId)
 

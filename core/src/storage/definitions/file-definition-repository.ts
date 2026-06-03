@@ -10,27 +10,8 @@ import { readJsonFile } from '../file-json.js'
 import { walkJsonFiles } from '../walk-json-files.js'
 import type { DefinitionRepository } from './definition-repository.js'
 
-type LegacyDefinition<T> = T & {
-	blueprintId?: string
-}
-
 const relativePath = (path: string): string =>
 	relative(DEFINITIONS_ROOT, path).replace(/\\/g, '/')
-
-const normalizeDefinitionId = <T extends { defId?: string }>(
-	definition: LegacyDefinition<T>,
-): T | undefined => {
-	const defId = definition.defId ?? definition.blueprintId
-
-	if (defId === undefined) {
-		return undefined
-	}
-
-	return {
-		...definition,
-		defId,
-	}
-}
 
 export class FileDefinitionRepository implements DefinitionRepository {
 	private readonly itemDefinitions = new Map<string, EquipmentItemDef>()
@@ -75,40 +56,23 @@ export class FileDefinitionRepository implements DefinitionRepository {
 			const rel = relativePath(path)
 
 			if (rel.startsWith('items/')) {
-				const definition = normalizeDefinitionId(
-					readJsonFile<LegacyDefinition<EquipmentItemDef>>(path),
-				)
-
-				if (definition !== undefined) {
-					this.itemDefinitions.set(definition.defId, definition)
-				}
-
+				const definition = readJsonFile<EquipmentItemDef>(path)
+				this.itemDefinitions.set(definition.defId, definition)
 				continue
 			}
 
 			if (rel.startsWith('characters/monsters/')) {
-				const definition = normalizeDefinitionId(
-					readJsonFile<LegacyDefinition<MonsterDef>>(path),
-				)
-
-				if (definition !== undefined) {
-					this.monsterDefinitions.set(definition.defId, definition)
-				}
-
+				const definition = readJsonFile<MonsterDef>(path)
+				this.monsterDefinitions.set(definition.defId, definition)
 				continue
 			}
 
 			if (rel.startsWith('characters/classes/')) {
-				const definition = normalizeDefinitionId(
-					readJsonFile<LegacyDefinition<CharacterClassDef>>(path),
+				const definition = readJsonFile<CharacterClassDef>(path)
+				this.characterClassDefinitions.set(
+					definition.defId,
+					definition,
 				)
-
-				if (definition !== undefined) {
-					this.characterClassDefinitions.set(
-						definition.defId,
-						definition,
-					)
-				}
 			}
 		}
 	}

@@ -5,7 +5,6 @@ export const CORE_ROOT = join(
 	dirname(fileURLToPath(import.meta.url)),
 	'..',
 	'..',
-	'..',
 )
 
 export const CONTENT_ROOT = join(CORE_ROOT, 'content')

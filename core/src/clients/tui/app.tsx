@@ -2,17 +2,27 @@ import React, { useMemo, useState } from 'react'
 import { Box, Text, useApp, useInput, useWindowSize } from 'ink'
 
 import type { CoreServices } from '../../index.js'
-import type { CharacterClassType } from '../../domain/definitions/character-definitions.js'
+import type {
+	CharacterClassDef,
+	CharacterClassType,
+	MonsterDef,
+} from '../../domain/definitions/character-definitions.js'
+import type {
+	EquipmentItemDef,
+	ItemDef,
+} from '../../domain/definitions/item-definitions.js'
+import type { PlayerCharacter } from '../../domain/player.js'
 import type { Stats } from '../../domain/stats/index.js'
 
-type Resource = 'simulations' | 'definitions' | 'game-save-state'
-type Screen = 'resources' | 'options' | 'list' | 'form' | 'confirm' | 'message'
+type Screen = 'menu' | 'form' | 'list' | 'game' | 'message'
+type BackTarget = 'menu' | 'catalog' | 'game'
 
 interface SelectableItem {
 	label: string
 	detail: string
 	hint?: string
-	experimental?: boolean
+	disabled?: boolean
+	statusLabel?: string
 	action(): void
 }
 
@@ -21,38 +31,33 @@ interface FormField {
 	label: string
 	value: string
 	required?: boolean
+	type?: 'text' | 'select'
+	options?: readonly string[]
 }
 
 interface FormState {
 	title: string
 	description: string
 	fields: FormField[]
-	submit(fields: Record<string, string>): string
-}
-
-interface ConfirmState {
-	title: string
-	description: string
-	confirm(): string
+	backTarget: BackTarget
+	submit(fields: Record<string, string>): void
 }
 
 interface ListState {
 	title: string
 	description: string
 	items: SelectableItem[]
+	backTarget: BackTarget
+}
+
+interface MessageState {
+	text: string
+	backTarget: BackTarget
 }
 
 interface TuiAppProps {
 	services: CoreServices
 }
-
-const resourceDetails: Record<Resource, string> = {
-	simulations: 'Experimental combat workflows backed by scaffolding.',
-	definitions: 'Read-only game blueprints stored under content/definitions.',
-	'game-save-state': 'Writable player characters and owned items.',
-}
-
-const stringifyPreview = (value: unknown): string => JSON.stringify(value, null, 2)
 
 const characterClassTypes: CharacterClassType[] = [
 	'Ninja',
@@ -60,37 +65,6 @@ const characterClassTypes: CharacterClassType[] = [
 	'Sura',
 	'Warrior',
 ]
-
-const parseCharacterClassType = (value: string): CharacterClassType => {
-	const classType = characterClassTypes.find((item) => item === value)
-
-	if (classType === undefined) {
-		throw new Error(`unsupported character class: ${value}`)
-	}
-
-	return classType
-}
-
-const parseOptionalNumber = (value: string): number | undefined => {
-	const trimmed = value.trim()
-
-	if (trimmed.length === 0) {
-		return undefined
-	}
-
-	const parsed = Number(trimmed)
-	return Number.isFinite(parsed) ? parsed : undefined
-}
-
-const parseOptionalJson = <T,>(value: string): T | undefined => {
-	const trimmed = value.trim()
-
-	if (trimmed.length === 0) {
-		return undefined
-	}
-
-	return JSON.parse(trimmed) as T
-}
 
 const titleLines = [
 	' __  __ _____ ____     ____                           ',
@@ -100,6 +74,28 @@ const titleLines = [
 	'|_|  |_| |_| |_____|  |____/ \\___|_|    \\_/ \\___|_|   ',
 ]
 
+const statLabels: Record<string, string> = {
+	averageDamage: 'Average Damage',
+	attackSpeed: 'Attack Speed',
+	castingSpeed: 'Casting Speed',
+	cooldownReduction: 'Cooldown Reduction',
+	criticalStrikeChance: 'Critical Strike Chance',
+	damageSpread: 'Damage Spread',
+	dexterity: 'Dexterity',
+	healthPoints: 'Health Points',
+	intellect: 'Intellect',
+	magicDamage: 'Magic Damage',
+	magicDefense: 'Magic Defense',
+	manaPoints: 'Mana Points',
+	movementSpeed: 'Movement Speed',
+	physicalDamage: 'Physical Damage',
+	physicalDefense: 'Physical Defense',
+	piercingChance: 'Piercing Chance',
+	skillDamage: 'Skill Damage',
+	strength: 'Strength',
+	vitality: 'Vitality',
+}
+
 const TitleBanner = () => (
 	<Box flexDirection="column" marginBottom={1}>
 		{titleLines.map((line) => (
@@ -107,26 +103,51 @@ const TitleBanner = () => (
 				{line}
 			</Text>
 		))}
-		<Text color="gray">
-			Definitions, game save state, and simulations
-		</Text>
+		<Text color="gray">TUI game, catalog, and simulations</Text>
 	</Box>
 )
 
 const FooterHelp = ({ screen }: { screen: Screen }) => {
-	const back = screen === 'resources' ? '' : '  b back'
+	const searchHelp = screen === 'list' ? (
+		<>
+			{' '}
+			<Text color="yellow">/</Text> search
+		</>
+	) : null
+	const formHelp = screen === 'form' ? (
+		<>
+			{' '}
+			<Text color="yellow">Enter</Text> next/submit
+		</>
+	) : (
+		<>
+			{' '}
+			<Text color="yellow">Enter</Text> select
+		</>
+	)
+	const backHelp = screen === 'menu' ? null : <> b back</>
 
 	return (
 		<Box borderStyle="single" borderColor="gray" paddingX={1}>
 			<Text color="gray">
-				<Text color="yellow">↑/↓</Text> move <Text color="yellow">Enter</Text> select{back} <Text color="yellow">/</Text> search{' '}
-				<Text color="yellow">Ctrl+K</Text> resources/options <Text color="yellow">q</Text> quit
+				<Text color="yellow">↑/↓</Text> move
+				{formHelp}
+				{backHelp}
+				{searchHelp} <Text color="yellow">q</Text> quit
 			</Text>
 		</Box>
 	)
 }
 
-const SelectionList = ({ items, selectedIndex, search }: { items: SelectableItem[]; selectedIndex: number; search: string }) => (
+const SelectionList = ({
+	items,
+	selectedIndex,
+	search,
+}: {
+	items: SelectableItem[]
+	selectedIndex: number
+	search: string
+}) => (
 	<Box flexDirection="column" minWidth={28}>
 		{search.length > 0 && (
 			<Text color="gray">
@@ -135,64 +156,211 @@ const SelectionList = ({ items, selectedIndex, search }: { items: SelectableItem
 		)}
 		{items.map((item, index) => {
 			const isSelected = index === selectedIndex
+			const color = item.disabled === true ? 'gray' : undefined
 
 			return (
 				<Text key={`${item.label}-${index}`}>
-					<Text color={isSelected ? 'green' : 'gray'}>{isSelected ? '› ' : '  '}</Text>
-					<Text color={isSelected ? 'green' : undefined} bold={isSelected}>
+					<Text color={isSelected ? 'green' : 'gray'}>
+						{isSelected ? '› ' : '  '}
+					</Text>
+					<Text
+						color={isSelected ? 'green' : color}
+						bold={isSelected && item.disabled !== true}
+					>
 						{item.label}
 					</Text>
-					{item.experimental === true && <Text color="yellow"> experimental</Text>}
+					{item.statusLabel !== undefined && (
+						<Text color="yellow"> ({item.statusLabel})</Text>
+					)}
 				</Text>
 			)
 		})}
 	</Box>
 )
 
-const SelectionDetails = ({ item }: { item?: SelectableItem }) => (
-	<Box flexDirection="column" marginLeft={4} flexGrow={1}>
-		<Text color="magenta" bold>
-			Details
-		</Text>
-		<Text color="gray">{item?.detail ?? 'Choose an option to see what it does.'}</Text>
-		{item?.hint !== undefined && (
-			<Box marginTop={1}>
-				<Text color="gray">{item.hint}</Text>
-			</Box>
-		)}
-	</Box>
-)
+const SelectionDetails = ({ item }: { item?: SelectableItem }) => {
+	const lines = item?.detail.split('\n') ?? [
+		'Choose an option to see what it does.',
+	]
 
-const FormView = ({ form, fieldIndex, input }: { form: FormState; fieldIndex: number; input: string }) => (
-	<Box flexDirection="row">
-		<Box flexDirection="column" minWidth={36}>
-			<Text color="magenta" bold>
-				{form.title}
-			</Text>
-			{form.fields.map((field, index) => (
-				<Text key={field.name}>
-					<Text color={index === fieldIndex ? 'green' : 'gray'}>{index === fieldIndex ? '› ' : '  '}</Text>
-					<Text color={index === fieldIndex ? 'green' : undefined}>
-						{field.label}: {index === fieldIndex ? input : field.value}
-					</Text>
-				</Text>
-			))}
-		</Box>
-		<Box marginLeft={4} flexDirection="column" flexGrow={1}>
+	return (
+		<Box flexDirection="column" marginLeft={4} flexGrow={1}>
 			<Text color="magenta" bold>
 				Details
 			</Text>
-			<Text color="gray">{form.description}</Text>
-			<Text color="gray">Press Enter to move through fields and submit from the last field.</Text>
+			{lines.map((line, index) => (
+				<Text key={`${line}-${index}`} color="gray">
+					{line}
+				</Text>
+			))}
+			{item?.hint !== undefined && (
+				<Box marginTop={1}>
+					<Text color="gray">{item.hint}</Text>
+				</Box>
+			)}
 		</Box>
-	</Box>
-)
+	)
+}
+
+const formatFormFieldValue = (
+	field: FormField,
+	isActive: boolean,
+	input: string,
+): string => {
+	if (isActive) {
+		return input
+	}
+
+	if (field.value.length === 0 && field.type !== 'select') {
+		return ''
+	}
+
+	return field.value
+}
+
+const FormView = ({
+	form,
+	fieldIndex,
+	input,
+}: {
+	form: FormState
+	fieldIndex: number
+	input: string
+}) => {
+	const activeField = form.fields[fieldIndex]
+
+	return (
+		<Box flexDirection="row">
+			<Box flexDirection="column" minWidth={36}>
+				<Text color="magenta" bold>
+					{form.title}
+				</Text>
+				{form.fields.map((field, index) => {
+					const isActive = index === fieldIndex
+					const displayValue = formatFormFieldValue(field, isActive, input)
+
+					return (
+						<Text key={field.name}>
+							<Text color={isActive ? 'green' : 'gray'}>
+								{isActive ? '› ' : '  '}
+							</Text>
+							<Text color={isActive ? 'green' : undefined}>
+								{field.label}: {displayValue}
+								{isActive && field.type === 'select' && (
+									<Text color="gray"> (↑/↓)</Text>
+								)}
+							</Text>
+						</Text>
+					)
+				})}
+			</Box>
+			<Box marginLeft={4} flexDirection="column" flexGrow={1}>
+				<Text color="magenta" bold>
+					Details
+				</Text>
+				<Text color="gray">{form.description}</Text>
+				<Text color="gray">
+					{activeField?.type === 'select'
+						? 'Use ↑/↓ to choose a class, then press Enter.'
+						: 'Type a name, then press Enter to continue.'}
+				</Text>
+			</Box>
+		</Box>
+	)
+}
+
+const formatLabel = (key: string): string =>
+	statLabels[key] ?? key.replace(/([A-Z])/g, ' $1').trim()
+
+const formatStats = (stats: Stats): string => {
+	const entries = Object.entries(stats)
+		.filter(([, value]) => value !== undefined)
+		.sort(([left], [right]) => left.localeCompare(right))
+
+	if (entries.length === 0) {
+		return 'No stats available.'
+	}
+
+	return entries
+		.map(([key, value]) => `${formatLabel(key)}: ${String(value)}`)
+		.join('\n')
+}
+
+const definitionName = (defId: string): string => defId.split('/').pop() ?? defId
+
+const parseCharacterClassType = (value: string): CharacterClassType => {
+	const normalized = value.trim().toLowerCase()
+	const classType = characterClassTypes.find(
+		(item) => item.toLowerCase() === normalized,
+	)
+
+	if (classType === undefined) {
+		throw new Error(`Unsupported character class: ${value}`)
+	}
+
+	return classType
+}
+
+const isEquipmentItemDef = (definition: ItemDef): definition is EquipmentItemDef =>
+	'baseStats' in definition
+
+const formatCharacterDetails = (character: PlayerCharacter): string =>
+	[
+		`Name: ${character.name}`,
+		`Class: ${character.classType}`,
+		`Level: ${character.level}`,
+		`Experience: ${character.experience}`,
+		'',
+		formatStats(character.stats),
+	].join('\n')
+
+const formatClassDefinitionDetails = (definition: CharacterClassDef): string =>
+	[
+		`Name: ${definition.name ?? definitionName(definition.defId)}`,
+		`Definition: ${definition.defId}`,
+		'',
+		formatStats(definition.stats),
+	].join('\n')
+
+const formatMonsterDefinitionDetails = (definition: MonsterDef): string =>
+	[
+		`Name: ${definition.name ?? definitionName(definition.defId)}`,
+		`Definition: ${definition.defId}`,
+		`Level: ${definition.level}`,
+		`Experience: ${definition.experience}`,
+		`Gold: ${definition.gold}`,
+		`Gold Spread: ${definition.goldSpread}`,
+		'',
+		formatStats(definition.stats),
+	].join('\n')
+
+const formatEquipmentDefinitionDetails = (definition: ItemDef): string => {
+	const lines = [
+		`Name: ${definition.name}`,
+		`Definition: ${definition.defId}`,
+		`Description: ${definition.description}`,
+	]
+
+	if (!isEquipmentItemDef(definition)) {
+		return lines.join('\n')
+	}
+
+	return [
+		...lines,
+		`Type: ${definition.type}`,
+		`Subtype: ${definition.subType}`,
+		`Wearable From Level: ${definition.wearableFromLevel}`,
+		`Upgrade Level: ${definition.upgradeLevel}`,
+		`Wearable Classes: ${definition.wearableClasses.join(', ')}`,
+		'',
+		formatStats(definition.baseStats),
+	].join('\n')
+}
 
 export const TuiApp = ({ services }: TuiAppProps) => {
 	const { exit } = useApp()
-	const { width } = useWindowSize()
-	const [screen, setScreen] = useState<Screen>('resources')
-	const [resource, setResource] = useState<Resource | null>(null)
+	const { columns } = useWindowSize()
+	const [screen, setScreen] = useState<Screen>('menu')
 	const [selectedIndex, setSelectedIndex] = useState(0)
 	const [search, setSearch] = useState('')
 	const [isSearching, setIsSearching] = useState(false)
@@ -200,8 +368,9 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 	const [form, setForm] = useState<FormState | null>(null)
 	const [fieldIndex, setFieldIndex] = useState(0)
 	const [fieldInput, setFieldInput] = useState('')
-	const [confirm, setConfirm] = useState<ConfirmState | null>(null)
-	const [message, setMessage] = useState<string | null>(null)
+	const [message, setMessage] = useState<MessageState | null>(null)
+	const [activeCharacter, setActiveCharacter] =
+		useState<PlayerCharacter | null>(null)
 
 	const resetSelection = () => {
 		setSelectedIndex(0)
@@ -209,33 +378,27 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 		setIsSearching(false)
 	}
 
-	const showMessage = (nextMessage: string) => {
-		setMessage(nextMessage)
-		setScreen('message')
-		resetSelection()
-	}
-
-	const openResources = () => {
-		setResource(null)
+	const openMenu = () => {
+		setScreen('menu')
 		setList(null)
 		setForm(null)
-		setConfirm(null)
-		setScreen('resources')
+		setMessage(null)
 		resetSelection()
 	}
 
-	const openOptions = (nextResource: Resource) => {
-		setResource(nextResource)
+	const openGame = () => {
+		setScreen('game')
 		setList(null)
 		setForm(null)
-		setConfirm(null)
-		setScreen('options')
+		setMessage(null)
 		resetSelection()
 	}
 
-	const openList = (title: string, description: string, items: SelectableItem[]) => {
-		setList({ title, description, items })
+	const openList = (nextList: ListState) => {
+		setList(nextList)
 		setScreen('list')
+		setForm(null)
+		setMessage(null)
 		resetSelection()
 	}
 
@@ -244,393 +407,304 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 		setFieldIndex(0)
 		setFieldInput(nextForm.fields[0]?.value ?? '')
 		setScreen('form')
+		setList(null)
+		setMessage(null)
 		setSearch('')
 		setIsSearching(false)
 	}
 
-	const openConfirm = (nextConfirm: ConfirmState) => {
-		setConfirm(nextConfirm)
-		setScreen('confirm')
-		setSearch('')
-		setIsSearching(false)
+	const showMessage = (text: string, backTarget: BackTarget = 'menu') => {
+		setMessage({ text, backTarget })
+		setScreen('message')
+		setList(null)
+		setForm(null)
+		resetSelection()
 	}
 
-	const definitionItems = (): SelectableItem[] =>
-		services.definitions.listDefinitions().map((definition) => ({
-			label: definition.defId,
-			detail: `${definition.kind} definition`,
-			hint: definition.name,
-			action: () => {
-				showMessage(stringifyPreview(definition))
-			},
-		}))
+	const openBackTarget = (backTarget: BackTarget) => {
+		if (backTarget === 'catalog') {
+			openCatalogMenu()
+			return
+		}
 
-	const gameSaveStateItems = (): SelectableItem[] => [
-		...services.gameSaveState.listPlayerOwnedItems().map((item) => ({
-			label: item.id,
-			detail: `Owned item from ${item.defId}`,
-			hint: `Owner ${item.owner}`,
-			action: () => {
-				showMessage(stringifyPreview(item))
-			},
-		})),
-		...services.gameSaveState.listPlayerCharacters().map((character) => ({
-			label: character.id,
-			detail: `${character.classType} player character`,
-			hint: `${character.name}, level ${character.level}`,
-			action: () => {
-				showMessage(stringifyPreview(character))
-			},
-		})),
-	]
+		if (backTarget === 'game' && activeCharacter !== null) {
+			openGame()
+			return
+		}
 
-	const resources = (): SelectableItem[] => [
+		openMenu()
+	}
+
+	const openNewGameForm = () => {
+		openForm({
+			title: 'New Game',
+			description: 'Create a new player character.',
+			backTarget: 'menu',
+			fields: [
+				{
+					name: 'name',
+					label: 'Name',
+					value: '',
+					required: true,
+					type: 'text',
+				},
+				{
+					name: 'classType',
+					label: 'Class',
+					value: 'Warrior',
+					required: true,
+					type: 'select',
+					options: characterClassTypes,
+				},
+			],
+			submit: (fields) => {
+				const name = fields.name?.trim() ?? ''
+
+				if (name.length === 0) {
+					throw new Error('Character name is required.')
+				}
+
+				const character = services.gameSaveState.createPlayerCharacter({
+					name,
+					classType: parseCharacterClassType(fields.classType ?? ''),
+				})
+
+				setActiveCharacter(character)
+				openGame()
+			},
+		})
+	}
+
+	const openLoadGameList = () => {
+		const characters = services.gameSaveState.listPlayerCharacters()
+		const items =
+			characters.length === 0
+				? [
+						{
+							label: 'No saved characters',
+							detail: 'Create a new game before loading a character.',
+							disabled: true,
+							action: () => {},
+						},
+					]
+				: characters.map((character) => ({
+						label: character.name,
+						detail: formatCharacterDetails(character),
+						hint: `${character.classType}, level ${character.level}`,
+						action: () => {
+							setActiveCharacter(character)
+							openGame()
+						},
+					}))
+
+		openList({
+			title: 'Load Game',
+			description: 'Select an existing player character.',
+			items,
+			backTarget: 'menu',
+		})
+	}
+
+	const openCatalogMenu = () => {
+		openList({
+			title: 'Game Catalog',
+			description: 'Browse definitions from the game catalog.',
+			backTarget: 'menu',
+			items: [
+				{
+					label: 'Classes',
+					detail: 'Browse player character class definitions.',
+					action: openClassCatalog,
+				},
+				{
+					label: 'Mobs',
+					detail: 'Browse monster definitions.',
+					action: openMonsterCatalog,
+				},
+				{
+					label: 'Gear',
+					detail: 'Browse equipment definitions.',
+					action: openGearCatalog,
+				},
+				{
+					label: 'Items',
+					detail: 'Item catalog is planned but not implemented yet.',
+					disabled: true,
+					statusLabel: 'soon',
+					action: () => {},
+				},
+			],
+		})
+	}
+
+	const openClassCatalog = () => {
+		openList({
+			title: 'Classes',
+			description: 'Character class definitions.',
+			backTarget: 'catalog',
+			items: services.definitions.listCharacterClassDefinitions().map(
+				(definition) => ({
+					label: definition.name ?? definitionName(definition.defId),
+					detail: formatClassDefinitionDetails(definition),
+					hint: definition.defId,
+					action: () => {},
+				}),
+			),
+		})
+	}
+
+	const openMonsterCatalog = () => {
+		openList({
+			title: 'Mobs',
+			description: 'Monster definitions.',
+			backTarget: 'catalog',
+			items: services.definitions.listMonsterDefinitions().map((definition) => ({
+				label: definition.name ?? definitionName(definition.defId),
+				detail: formatMonsterDefinitionDetails(definition),
+				hint: definition.defId,
+				action: () => {},
+			})),
+		})
+	}
+
+	const openGearCatalog = () => {
+		openList({
+			title: 'Gear',
+			description: 'Equipment definitions.',
+			backTarget: 'catalog',
+			items: services.definitions.listItemDefinitions().map((definition) => ({
+				label: definition.name,
+				detail: formatEquipmentDefinitionDetails(definition),
+				hint: definition.defId,
+				action: () => {},
+			})),
+		})
+	}
+
+	const menuItems = (): SelectableItem[] => [
+		{
+			label: 'New Game',
+			detail: 'Create and load a new player character.',
+			action: openNewGameForm,
+		},
+		{
+			label: 'Load Game',
+			detail: 'Load an existing player character.',
+			action: openLoadGameList,
+		},
+		{
+			label: 'Game Catalog',
+			detail: 'Browse class, mob, and gear definitions.',
+			action: openCatalogMenu,
+		},
 		{
 			label: 'Simulations',
-			detail: resourceDetails.simulations,
-			experimental: true,
-			action: () => {
-				openOptions('simulations')
-			},
-		},
-		{
-			label: 'Definitions',
-			detail: resourceDetails.definitions,
-			action: () => {
-				openOptions('definitions')
-			},
-		},
-		{
-			label: 'Game Save State',
-			detail: resourceDetails['game-save-state'],
-			action: () => {
-				openOptions('game-save-state')
-			},
+			detail: 'Simulations are planned but not implemented yet.',
+			disabled: true,
+			statusLabel: 'soon',
+			action: () => {},
 		},
 	]
 
-	const createItemForm = (): FormState => ({
-		title: 'Create Equipment Item',
-		description: 'Create a player-owned item from an item definition.',
-		fields: [
-			{
-				name: 'itemDefinitionId',
-				label: 'Item Definition ID',
-				value: services.definitions.listItemDefinitions()[0]?.defId ?? '',
-				required: true,
-			},
-			{
-				name: 'owner',
-				label: 'Owner Character ID',
-				value: '',
-				required: true,
-			},
-		],
-		submit: (fields) => {
-			const item = services.gameSaveState.createEquipmentItem({
-				itemDefinitionId: fields.itemDefinitionId,
-				owner: fields.owner,
-			})
-
-			return `Created item ${item.id}`
+	const gameActions = (): SelectableItem[] => [
+		{
+			label: 'Level up',
+			detail: 'Leveling up is planned but not implemented yet.',
+			disabled: true,
+			statusLabel: 'soon',
+			action: () => {},
 		},
-	})
-
-	const createCharacterForm = (): FormState => ({
-		title: 'Create Player Character',
-		description: 'Create a player character from name and class type.',
-		fields: [
-			{
-				name: 'classType',
-				label: 'Class Type',
-				value: 'Warrior',
-				required: true,
-			},
-			{ name: 'name', label: 'Name', value: 'Local Character', required: true },
-		],
-		submit: (fields) => {
-			const character = services.gameSaveState.createPlayerCharacter({
-				classType: parseCharacterClassType(fields.classType),
-				name: fields.name,
-			})
-
-			return `Created character ${character.id}`
+		{
+			label: 'Fight',
+			detail: 'Combat is planned but not implemented yet.',
+			disabled: true,
+			statusLabel: 'soon',
+			action: () => {},
 		},
-	})
-
-	const updateItemForm = (): FormState => ({
-		title: 'Patch Equipment Item',
-		description: 'Patch item definition, owner, or extra stats.',
-		fields: [
-			{ name: 'id', label: 'ID', value: '', required: true },
-			{ name: 'itemDefinitionId', label: 'Item Definition ID', value: '' },
-			{ name: 'owner', label: 'Owner Character ID', value: '' },
-			{ name: 'extraStats', label: 'Extra stats JSON', value: '' },
-		],
-		submit: (fields) => {
-			const item = services.gameSaveState.patchEquipmentItem(fields.id, {
-				itemDefinitionId: fields.itemDefinitionId.trim() || undefined,
-				owner: fields.owner.trim() || undefined,
-				extraStats: parseOptionalJson<Stats>(fields.extraStats),
-			})
-
-			return `Updated item ${item.id}`
+		{
+			label: 'Equip gear',
+			detail: 'Equipment management is planned but not implemented yet.',
+			disabled: true,
+			statusLabel: 'soon',
+			action: () => {},
 		},
-	})
-
-	const updateCharacterForm = (): FormState => ({
-		title: 'Patch Player Character',
-		description: 'Update character fields; leave blanks to preserve values.',
-		fields: [
-			{ name: 'id', label: 'ID', value: '', required: true },
-			{ name: 'name', label: 'Name', value: '' },
-			{ name: 'level', label: 'Level', value: '' },
-			{ name: 'experience', label: 'Experience', value: '' },
-			{ name: 'progression', label: 'Progression JSON', value: '' },
-		],
-		submit: (fields) => {
-			const character = services.gameSaveState.patchPlayerCharacter(fields.id, {
-				name: fields.name.trim() || undefined,
-				level: parseOptionalNumber(fields.level),
-				experience: parseOptionalNumber(fields.experience),
-				progression: parseOptionalJson(fields.progression),
-			})
-
-			return `Updated character ${character.id}`
+		{
+			label: 'Improve gear',
+			detail: 'Gear improvement is planned but not implemented yet.',
+			disabled: true,
+			statusLabel: 'soon',
+			action: () => {},
 		},
-	})
-
-	const deleteForm = (title: string, description: string, deleteItem: (id: string) => void): FormState => ({
-		title,
-		description,
-		fields: [{ name: 'id', label: 'ID', value: '', required: true }],
-		submit: (fields) => {
-			openConfirm({
-				title,
-				description: `Delete ${fields.id}?`,
-				confirm: () => {
-					deleteItem(fields.id)
-					return `Deleted ${fields.id}`
-				},
-			})
-
-			return ''
-		},
-	})
-
-	const options = (): SelectableItem[] => {
-		if (resource === 'simulations') {
-			return [
-				{
-					label: 'List simulations',
-					detail: 'Shows the current experimental simulation scaffold.',
-					experimental: true,
-					action: () => {
-						openList(
-							'Simulations',
-							resourceDetails.simulations,
-							services.simulations.listSimulations().map((item) => ({
-								label: item.uid,
-								detail: item.status,
-								experimental: true,
-								action: () => {
-									showMessage(stringifyPreview(item))
-								},
-							})),
-						)
-					},
-				},
-				{
-					label: 'Create simulation',
-					detail: 'Creates the current experimental simulation scaffold.',
-					experimental: true,
-					action: () => {
-						const simulation = services.simulations.createSimulation({})
-						showMessage(stringifyPreview(simulation))
-					},
-				},
-			]
-		}
-
-		if (resource === 'definitions') {
-			return [
-				{
-					label: 'List item definitions',
-					detail: 'Lists read-only equipment item definitions.',
-					action: () => {
-						openList(
-							'Item Definitions',
-							'Equipment item blueprints.',
-							services.definitions.listItemDefinitions().map((definition) => ({
-								label: definition.defId,
-								detail: definition.description,
-								hint: definition.name,
-								action: () => {
-									showMessage(stringifyPreview(definition))
-								},
-							})),
-						)
-					},
-				},
-				{
-					label: 'List monster definitions',
-					detail: 'Lists read-only monster definitions.',
-					action: () => {
-						openList(
-							'Monster Definitions',
-							'Monster blueprints.',
-							services.definitions.listMonsterDefinitions().map((definition) => ({
-								label: definition.defId,
-								detail: `Level ${definition.level}`,
-								action: () => {
-									showMessage(stringifyPreview(definition))
-								},
-							})),
-						)
-					},
-				},
-				{
-					label: 'List character class definitions',
-					detail: 'Lists read-only character class definitions.',
-					action: () => {
-						openList(
-							'Character Class Definitions',
-							'Character class blueprints.',
-							services.definitions.listCharacterClassDefinitions().map((definition) => ({
-								label: definition.defId,
-								detail: 'Base class stats',
-								action: () => {
-									showMessage(stringifyPreview(definition))
-								},
-							})),
-						)
-					},
-				},
-				{
-					label: 'Get definition',
-					detail: 'Searches across every definition type.',
-					action: () => {
-						openList('All Definitions', 'Search all read-only definitions.', definitionItems())
-					},
-				},
-			]
-		}
-
-		return [
-			{
-				label: 'List owned items',
-				detail: 'Lists player-owned equipment items.',
-				action: () => {
-					openList(
-						'Player Owned Items',
-						'Player-owned equipment items.',
-						services.gameSaveState.listPlayerOwnedItems().map((item) => ({
-							label: item.id,
-							detail: item.defId,
-							hint: `Owner ${item.owner}`,
-							action: () => {
-								showMessage(stringifyPreview(item))
-							},
-						})),
-					)
-				},
-			},
-			{
-				label: 'List player characters',
-				detail: 'Lists player characters.',
-				action: () => {
-					openList(
-						'Player Characters',
-						'Player characters.',
-						services.gameSaveState.listPlayerCharacters().map((character) => ({
-							label: character.id,
-							detail: character.classType,
-							hint: `${character.name}, level ${character.level}`,
-							action: () => {
-								showMessage(stringifyPreview(character))
-							},
-						})),
-					)
-				},
-			},
-			{
-				label: 'Get save state',
-				detail: 'Searches across player characters and owned items.',
-				action: () => {
-					openList('Game Save State', 'Search game save state.', gameSaveStateItems())
-				},
-			},
-			{
-				label: 'Create equipment item',
-				detail: 'Creates an owned item from a definition ID.',
-				action: () => {
-					openForm(createItemForm())
-				},
-			},
-			{
-				label: 'Create player character',
-				detail: 'Creates a player character from name and class.',
-				action: () => {
-					openForm(createCharacterForm())
-				},
-			},
-			{
-				label: 'Patch equipment item',
-				detail: 'Patches an owned item by ID.',
-				action: () => {
-					openForm(updateItemForm())
-				},
-			},
-			{
-				label: 'Patch player character',
-				detail: 'Patches player character state by ID.',
-				action: () => {
-					openForm(updateCharacterForm())
-				},
-			},
-			{
-				label: 'Delete equipment item',
-				detail: 'Deletes an owned item by ID after confirmation.',
-				action: () => {
-					openForm(
-						deleteForm('Delete Equipment Item', 'Deletes an owned item by ID.', (id) => {
-							services.gameSaveState.deleteEquipmentItem(id)
-						}),
-					)
-				},
-			},
-		]
-	}
+	]
 
 	const currentItems = useMemo(() => {
-		const source = screen === 'resources' ? resources() : screen === 'options' ? options() : screen === 'list' ? (list?.items ?? []) : []
+		const source =
+			screen === 'menu'
+				? menuItems()
+				: screen === 'list'
+					? (list?.items ?? [])
+					: screen === 'game'
+						? gameActions()
+						: []
 
-		if (search.length === 0) {
+		if (search.length === 0 || screen !== 'list') {
 			return source
 		}
 
 		const normalized = search.toLowerCase()
-		return source.filter((item) => `${item.label} ${item.detail} ${item.hint ?? ''}`.toLowerCase().includes(normalized))
-	}, [screen, resource, list, search])
+		return source.filter((item) =>
+			`${item.label} ${item.detail} ${item.hint ?? ''}`
+				.toLowerCase()
+				.includes(normalized),
+		)
+	}, [screen, list, search])
 
 	const selectedItem = currentItems[selectedIndex]
 
 	const goBack = () => {
-		if (screen === 'resources') {
+		if (screen === 'menu') {
 			return
 		}
 
-		if (screen === 'options' || screen === 'message') {
-			openResources()
+		if (screen === 'list' && list !== null) {
+			openBackTarget(list.backTarget)
 			return
 		}
 
-		if (resource !== null) {
-			openOptions(resource)
+		if (screen === 'form' && form !== null) {
+			openBackTarget(form.backTarget)
 			return
 		}
 
-		openResources()
+		if (screen === 'message' && message !== null) {
+			openBackTarget(message.backTarget)
+			return
+		}
+
+		openMenu()
+	}
+
+	const cycleSelectField = (direction: 'up' | 'down') => {
+		if (form === null) {
+			return
+		}
+
+		const field = form.fields[fieldIndex]
+
+		if (field?.type !== 'select' || field.options === undefined) {
+			return
+		}
+
+		const currentIndex = field.options.indexOf(fieldInput)
+		const fallbackIndex = field.options.indexOf(field.value)
+		const activeIndex = currentIndex >= 0 ? currentIndex : fallbackIndex
+		const nextIndex =
+			direction === 'up'
+				? (activeIndex - 1 + field.options.length) % field.options.length
+				: (activeIndex + 1) % field.options.length
+		const nextValue = field.options[nextIndex] ?? field.value
+
+		setFieldInput(nextValue)
 	}
 
 	const submitFormField = () => {
@@ -638,7 +712,9 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			return
 		}
 
-		const nextFields = form.fields.map((field, index) => (index === fieldIndex ? { ...field, value: fieldInput } : field))
+		const nextFields = form.fields.map((field, index) =>
+			index === fieldIndex ? { ...field, value: fieldInput } : field,
+		)
 		const nextFieldIndex = fieldIndex + 1
 
 		if (nextFieldIndex < nextFields.length) {
@@ -649,14 +725,20 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 		}
 
 		try {
-			const values = Object.fromEntries(nextFields.map((field) => [field.name, field.value]))
-			const nextMessage = form.submit(values)
+			const missingField = nextFields.find(
+				(field) => field.required === true && field.value.trim().length === 0,
+			)
 
-			if (nextMessage.length > 0) {
-				showMessage(nextMessage)
+			if (missingField !== undefined) {
+				throw new Error(`${missingField.label} is required.`)
 			}
+
+			const values = Object.fromEntries(
+				nextFields.map((field) => [field.name, field.value]),
+			)
+			form.submit(values)
 		} catch (err) {
-			showMessage(err instanceof Error ? err.message : String(err))
+			showMessage(err instanceof Error ? err.message : String(err), form.backTarget)
 		}
 	}
 
@@ -692,6 +774,22 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 				return
 			}
 
+			const activeField = form?.fields[fieldIndex]
+
+			if (activeField?.type === 'select') {
+				if (key.upArrow) {
+					cycleSelectField('up')
+					return
+				}
+
+				if (key.downArrow) {
+					cycleSelectField('down')
+					return
+				}
+
+				return
+			}
+
 			if (key.backspace || key.delete) {
 				setFieldInput((value) => value.slice(0, -1))
 				return
@@ -704,22 +802,12 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			return
 		}
 
-		if (key.ctrl && input.toLowerCase() === 'k') {
-			if (screen === 'resources') {
-				setResource('definitions')
-				setScreen('options')
-			} else {
-				openResources()
-			}
-			return
-		}
-
 		if (input === 'q') {
 			exit()
 			return
 		}
 
-		if (input === '/') {
+		if (screen === 'list' && input === '/') {
 			setIsSearching(true)
 			return
 		}
@@ -729,94 +817,113 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			return
 		}
 
-		if (screen === 'confirm') {
-			if (input.toLowerCase() === 'y' && confirm !== null) {
-				try {
-					showMessage(confirm.confirm())
-				} catch (err) {
-					showMessage(err instanceof Error ? err.message : String(err))
-				}
-				return
-			}
-
-			if (input.toLowerCase() === 'n') {
-				goBack()
-			}
-
-			return
-		}
-
 		if (key.upArrow) {
 			setSelectedIndex((index) => Math.max(0, index - 1))
 			return
 		}
 
 		if (key.downArrow) {
-			setSelectedIndex((index) => Math.min(currentItems.length - 1, index + 1))
+			setSelectedIndex((index) =>
+				Math.min(Math.max(0, currentItems.length - 1), index + 1),
+			)
 			return
 		}
 
-		if (key.return && selectedItem !== undefined) {
+		if (
+			key.return &&
+			selectedItem !== undefined &&
+			selectedItem.disabled !== true
+		) {
 			selectedItem.action()
 		}
 	})
 
-	const showCompactDetails = width < 90
+	const showCompactDetails = columns < 90
 	const title =
-		screen === 'resources'
-			? 'Resources'
-			: (list?.title ?? form?.title ?? confirm?.title ?? message !== null)
-				? 'Result'
-				: resource === 'simulations'
-					? 'Simulations'
-					: resource === 'definitions'
-						? 'Definitions'
-						: 'Game Save State'
+		screen === 'menu'
+			? 'Main Menu'
+			: screen === 'game'
+				? 'Game'
+				: (list?.title ?? form?.title ?? 'Result')
 
 	return (
 		<Box flexDirection="column" padding={1}>
 			<TitleBanner />
 			<Box marginBottom={1}>
 				<Text color="gray">
-					Definitions <Text color="cyan">{services.definitions.listDefinitions().length}</Text> Game Save State{' '}
-					<Text color="cyan">{gameSaveStateItems().length}</Text>
+					Characters{' '}
+					<Text color="cyan">
+						{services.gameSaveState.listPlayerCharacters().length}
+					</Text>{' '}
+					Definitions{' '}
+					<Text color="cyan">{services.definitions.listDefinitions().length}</Text>
 				</Text>
 			</Box>
-			{screen !== 'resources' && (
-				<Box marginBottom={1}>
-					<Text color="cyan" bold>
-						{title}
-					</Text>
-					{resource === 'simulations' && (
-						<Text color="yellow"> experimental</Text>
-					)}
-				</Box>
-			)}
-			<Box borderStyle="single" borderColor="gray" paddingX={1} paddingY={1} flexDirection="column" minHeight={10}>
+			<Box marginBottom={1}>
+				<Text color="cyan" bold>
+					{title}
+				</Text>
+			</Box>
+			<Box
+				borderStyle="single"
+				borderColor="gray"
+				paddingX={1}
+				paddingY={1}
+				flexDirection="column"
+				minHeight={10}
+			>
 				{screen === 'form' && form !== null ? (
 					<FormView form={form} fieldIndex={fieldIndex} input={fieldInput} />
-				) : screen === 'confirm' && confirm !== null ? (
-					<Box flexDirection="column">
-						<Text color="red" bold>
-							{confirm.title}
-						</Text>
-						<Text color="gray">{confirm.description}</Text>
-						<Text>
-							<Text color="yellow">y</Text> confirm <Text color="yellow">n</Text> cancel
-						</Text>
-					</Box>
 				) : screen === 'message' && message !== null ? (
-					<Text color="gray">{message}</Text>
+					<Text color="gray">{message.text}</Text>
+				) : screen === 'game' && activeCharacter !== null ? (
+					<Box flexDirection={showCompactDetails ? 'column' : 'row'}>
+						<Box flexDirection="column" minWidth={36}>
+							<Text color="magenta" bold>
+								{activeCharacter.name}
+							</Text>
+							{formatCharacterDetails(activeCharacter)
+								.split('\n')
+								.map((line, index) => (
+									<Text key={`${line}-${index}`} color="gray">
+										{line}
+									</Text>
+								))}
+						</Box>
+						<Box
+							flexDirection="column"
+							marginLeft={showCompactDetails ? 0 : 4}
+							marginTop={showCompactDetails ? 1 : 0}
+						>
+							<Text color="magenta" bold>
+								Actions
+							</Text>
+							<SelectionList
+								items={currentItems}
+								selectedIndex={selectedIndex}
+								search=""
+							/>
+							<SelectionDetails item={selectedItem} />
+						</Box>
+					</Box>
 				) : showCompactDetails ? (
 					<Box flexDirection="column">
-						<SelectionList items={currentItems} selectedIndex={selectedIndex} search={search} />
+						<SelectionList
+							items={currentItems}
+							selectedIndex={selectedIndex}
+							search={search}
+						/>
 						<Box marginTop={1}>
 							<SelectionDetails item={selectedItem} />
 						</Box>
 					</Box>
 				) : (
 					<Box flexDirection="row">
-						<SelectionList items={currentItems} selectedIndex={selectedIndex} search={search} />
+						<SelectionList
+							items={currentItems}
+							selectedIndex={selectedIndex}
+							search={search}
+						/>
 						<SelectionDetails item={selectedItem} />
 					</Box>
 				)}

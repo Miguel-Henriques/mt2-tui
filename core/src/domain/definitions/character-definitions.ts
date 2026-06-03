@@ -28,9 +28,3 @@ export interface MonsterDef extends CharacterDef {
     goldSpread: number
     experience: number
 }
-
-// /**
-//      * Character instance id.
-//      * For character definitions, this is the same as the defId.
-//      */
-// id: string

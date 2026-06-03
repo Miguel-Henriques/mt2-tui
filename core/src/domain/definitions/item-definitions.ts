@@ -1,11 +1,5 @@
 import { Stats } from "../stats/index.js"
 
-// /**
-//      * Item instance id.
-//      * For item definitions, this is the same as the defId.
-//      */
-// id: string
-
 export interface ItemDef {
     /**
      * Game object definition id
@@ -16,7 +10,7 @@ export interface ItemDef {
 }
 
 /**
- * Represents a blueprint for an equipment item.
+ * Represents a definition for an equipment item.
  */
 export interface EquipmentItemDef extends ItemDef {
     type: string
@@ -46,7 +40,7 @@ export interface ItemUpgradeRequirementsDef {
  * Lower tier weapons often use linear tables with different step sizes.
  * 
  * It could be the case we model this differently, e.g. using an upgrade table or separate
- * blueprint instances for each upgrade level. 
+ * definitions for each upgrade level. 
  * 
  */
 export type ItemUpgradeLevelMultiplier = 'FLAT_ADDITIVE'

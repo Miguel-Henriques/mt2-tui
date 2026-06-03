@@ -1,5 +1,5 @@
 {
-	"defIf": "characters/classes/ninja",
+	"defId": "characters/classes/ninja",
 	"stats": {
 		"healthPoints": 650,
 		"skillPoints": 200,

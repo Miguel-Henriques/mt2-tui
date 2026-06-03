@@ -1,7 +1,6 @@
 import { unlinkSync } from 'node:fs'
 import { relative } from 'node:path'
 
-import type { CharacterClassType } from '../../domain/definitions/character-definitions.js'
 import type {
 	EquipmentItemSave,
 	PlayerCharacterSave,
@@ -15,105 +14,8 @@ import {
 	playerOwnedItemPath,
 } from './game-save-state-paths.js'
 
-interface LegacyCharacterSave {
-	uid?: string
-	id?: string
-	blueprintId?: string
-	classType?: CharacterClassType
-	name?: string
-	level?: number
-	experience?: number
-	progression?: PlayerCharacterSave['progression']
-}
-
-interface LegacyItemSave {
-	uid?: string
-	id?: string
-	blueprintId?: string
-	defId?: string
-	owner?: string
-	upgradeLevel?: number
-	extraStats?: EquipmentItemSave['extraStats']
-}
-
-const classTypes: Record<string, CharacterClassType> = {
-	ninja: 'Ninja',
-	shaman: 'Shaman',
-	sura: 'Sura',
-	warrior: 'Warrior',
-}
-
 const relativePath = (path: string): string =>
 	relative(instancesRoot(), path).replace(/\\/g, '/')
-
-const upgradeLevelFromDefId = (defId: string): number => {
-	const segment = defId.split('/').pop() ?? ''
-	const plusIndex = segment.indexOf('+')
-
-	if (plusIndex === -1) {
-		return 0
-	}
-
-	const level = Number.parseInt(segment.slice(plusIndex + 1), 10)
-	return Number.isInteger(level) ? level : 0
-}
-
-const characterClassTypeFromDefinition = (
-	definitionId: string,
-): CharacterClassType | undefined => {
-	const segment = definitionId.split('/').pop()?.toLowerCase()
-
-	if (segment === undefined) {
-		return undefined
-	}
-
-	return classTypes[segment]
-}
-
-const toPlayerCharacterSave = (
-	value: LegacyCharacterSave,
-): PlayerCharacterSave | undefined => {
-	const id = value.id ?? value.uid
-	const classType = value.classType
-		?? (value.blueprintId === undefined
-			? undefined
-			: characterClassTypeFromDefinition(value.blueprintId))
-
-	if (id === undefined || classType === undefined || value.name === undefined) {
-		return undefined
-	}
-
-	return {
-		id,
-		classType,
-		name: value.name,
-		level: value.level ?? 1,
-		experience: value.experience ?? 0,
-		progression: value.progression ?? {
-			availableStatsPoints: 0,
-			spentStatPoints: {},
-		},
-	}
-}
-
-const toEquipmentItemSave = (
-	value: LegacyItemSave,
-): EquipmentItemSave | undefined => {
-	const id = value.id ?? value.uid
-	const defId = value.defId ?? value.blueprintId
-
-	if (id === undefined || defId === undefined || value.owner === undefined) {
-		return undefined
-	}
-
-	return {
-		id,
-		defId,
-		owner: value.owner,
-		upgradeLevel: value.upgradeLevel ?? upgradeLevelFromDefId(defId),
-		extraStats: value.extraStats,
-	}
-}
 
 export class FileGameSaveStateRepository implements GameSaveStateRepository {
 	private readonly playerCharacterPaths = new Map<string, string>()
@@ -175,30 +77,17 @@ export class FileGameSaveStateRepository implements GameSaveStateRepository {
 		for (const path of walkJsonFiles(instancesRoot())) {
 			const rel = relativePath(path)
 
-			if (rel.startsWith('player-characters/')
-				|| rel.startsWith('characters/classes/')
-			) {
-				const character = toPlayerCharacterSave(
-					readJsonFile<LegacyCharacterSave>(path),
-				)
-
-				if (character !== undefined) {
-					this.playerCharacters.set(character.id, character)
-					this.playerCharacterPaths.set(character.id, path)
-				}
-
+			if (rel.startsWith('player-characters/')) {
+				const character = readJsonFile<PlayerCharacterSave>(path)
+				this.playerCharacters.set(character.id, character)
+				this.playerCharacterPaths.set(character.id, path)
 				continue
 			}
 
-			if (rel.startsWith('player-owned-items/')
-				|| rel.startsWith('items/')
-			) {
-				const item = toEquipmentItemSave(readJsonFile<LegacyItemSave>(path))
-
-				if (item !== undefined) {
-					this.playerOwnedItems.set(item.id, item)
-					this.playerOwnedItemPaths.set(item.id, path)
-				}
+			if (rel.startsWith('player-owned-items/')) {
+				const item = readJsonFile<EquipmentItemSave>(path)
+				this.playerOwnedItems.set(item.id, item)
+				this.playerOwnedItemPaths.set(item.id, path)
 			}
 		}
 	}
