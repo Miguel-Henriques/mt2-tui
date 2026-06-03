@@ -2,9 +2,10 @@ import React, { useMemo, useState } from 'react'
 import { Box, Text, useApp, useInput, useWindowSize } from 'ink'
 
 import type { CoreServices } from '../../index.js'
-import type { Stats } from '../../domain/stats/primary-stats.js'
+import type { CharacterClassType } from '../../domain/definitions/character-definitions.js'
+import type { Stats } from '../../domain/stats/index.js'
 
-type Resource = 'simulations' | 'definitions' | 'instances'
+type Resource = 'simulations' | 'definitions' | 'game-save-state'
 type Screen = 'resources' | 'options' | 'list' | 'form' | 'confirm' | 'message'
 
 interface SelectableItem {
@@ -48,10 +49,27 @@ interface TuiAppProps {
 const resourceDetails: Record<Resource, string> = {
 	simulations: 'Experimental combat workflows backed by scaffolding.',
 	definitions: 'Read-only game blueprints stored under content/definitions.',
-	instances: 'Writable game objects stored under content/instances.',
+	'game-save-state': 'Writable player characters and owned items.',
 }
 
 const stringifyPreview = (value: unknown): string => JSON.stringify(value, null, 2)
+
+const characterClassTypes: CharacterClassType[] = [
+	'Ninja',
+	'Shaman',
+	'Sura',
+	'Warrior',
+]
+
+const parseCharacterClassType = (value: string): CharacterClassType => {
+	const classType = characterClassTypes.find((item) => item === value)
+
+	if (classType === undefined) {
+		throw new Error(`unsupported character class: ${value}`)
+	}
+
+	return classType
+}
 
 const parseOptionalNumber = (value: string): number | undefined => {
 	const trimmed = value.trim()
@@ -74,27 +92,24 @@ const parseOptionalJson = <T,>(value: string): T | undefined => {
 	return JSON.parse(trimmed) as T
 }
 
+const titleLines = [
+	' __  __ _____ ____     ____                           ',
+	'|  \\/  |_   _|___ \\   / ___|  ___ _ ____   _____ _ __ ',
+	'| |\\/| | | |   __) |  \\___ \\ / _ \\ \'__\\ \\ / / _ \\ \'__|',
+	'| |  | | | |  / __/    ___) |  __/ |   \\ V /  __/ |   ',
+	'|_|  |_| |_| |_____|  |____/ \\___|_|    \\_/ \\___|_|   ',
+]
+
 const TitleBanner = () => (
 	<Box flexDirection="column" marginBottom={1}>
-		<Text color="cyan" bold>
-			███╗ ███╗████████╗██████╗ ██╗ ██╗████████╗██╗██╗ ███████╗
+		{titleLines.map((line) => (
+			<Text key={line} color="cyan" bold>
+				{line}
+			</Text>
+		))}
+		<Text color="gray">
+			Definitions, game save state, and simulations
 		</Text>
-		<Text color="cyan" bold>
-			████╗ ████║╚══██╔══╝╚════██╗ ██║ ██║╚══██╔══╝██║██║ ██╔════╝
-		</Text>
-		<Text color="cyan" bold>
-			██╔████╔██║ ██║ █████╔╝ ██║ ██║ ██║ ██║██║ ███████╗
-		</Text>
-		<Text color="cyan" bold>
-			██║╚██╔╝██║ ██║ ██╔═══╝ ██║ ██║ ██║ ██║██║ ╚════██║
-		</Text>
-		<Text color="cyan" bold>
-			██║ ╚═╝ ██║ ██║ ███████╗ ╚██████╔╝ ██║ ██║███████╗███████║
-		</Text>
-		<Text color="cyan" bold>
-			╚═╝ ╚═╝ ╚═╝ ╚══════╝ ╚═════╝ ╚═╝ ╚═╝╚══════╝╚══════╝
-		</Text>
-		<Text color="gray">Local tools for definitions, instances, and simulations</Text>
 	</Box>
 )
 
@@ -242,7 +257,7 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 
 	const definitionItems = (): SelectableItem[] =>
 		services.definitions.listDefinitions().map((definition) => ({
-			label: definition.blueprintId,
+			label: definition.defId,
 			detail: `${definition.kind} definition`,
 			hint: definition.name,
 			action: () => {
@@ -250,26 +265,18 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			},
 		}))
 
-	const instanceItems = (): SelectableItem[] => [
-		...services.instances.listItems().map((item) => ({
-			label: item.uid,
-			detail: `Item instance from ${item.blueprintId}`,
-			hint: item.name,
+	const gameSaveStateItems = (): SelectableItem[] => [
+		...services.gameSaveState.listPlayerOwnedItems().map((item) => ({
+			label: item.id,
+			detail: `Owned item from ${item.defId}`,
+			hint: `Owner ${item.owner}`,
 			action: () => {
 				showMessage(stringifyPreview(item))
 			},
 		})),
-		...services.instances.listMonsters().map((monster) => ({
-			label: monster.uid,
-			detail: `Monster instance from ${monster.blueprintId}`,
-			hint: `Level ${monster.level}`,
-			action: () => {
-				showMessage(stringifyPreview(monster))
-			},
-		})),
-		...services.instances.listCharacterClasses().map((character) => ({
-			label: character.uid,
-			detail: `Character instance from ${character.blueprintId}`,
+		...services.gameSaveState.listPlayerCharacters().map((character) => ({
+			label: character.id,
+			detail: `${character.classType} player character`,
 			hint: `${character.name}, level ${character.level}`,
 			action: () => {
 				showMessage(stringifyPreview(character))
@@ -294,137 +301,116 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			},
 		},
 		{
-			label: 'Instances',
-			detail: resourceDetails.instances,
+			label: 'Game Save State',
+			detail: resourceDetails['game-save-state'],
 			action: () => {
-				openOptions('instances')
+				openOptions('game-save-state')
 			},
 		},
 	]
 
 	const createItemForm = (): FormState => ({
-		title: 'Create Item Instance',
-		description: 'Create an item instance from an item definition.',
+		title: 'Create Equipment Item',
+		description: 'Create a player-owned item from an item definition.',
 		fields: [
 			{
-				name: 'blueprintId',
-				label: 'Blueprint ID',
-				value: services.definitions.listItemDefinitions()[0]?.blueprintId ?? '',
+				name: 'itemDefinitionId',
+				label: 'Item Definition ID',
+				value: services.definitions.listItemDefinitions()[0]?.defId ?? '',
 				required: true,
 			},
 			{
-				name: 'extraStats',
-				label: 'Extra stats JSON',
+				name: 'owner',
+				label: 'Owner Character ID',
 				value: '',
-			},
-		],
-		submit: (fields) => {
-			const item = services.instances.createItem({
-				blueprintId: fields.blueprintId,
-				extraStats: parseOptionalJson<Stats>(fields.extraStats),
-			})
-
-			return `Created item ${item.uid}`
-		},
-	})
-
-	const createMonsterForm = (): FormState => ({
-		title: 'Create Monster Instance',
-		description: 'Create a monster instance from a monster definition.',
-		fields: [
-			{
-				name: 'blueprintId',
-				label: 'Blueprint ID',
-				value: services.definitions.listMonsterDefinitions()[0]?.blueprintId ?? '',
 				required: true,
 			},
 		],
 		submit: (fields) => {
-			const monster = services.instances.createMonster({
-				blueprintId: fields.blueprintId,
+			const item = services.gameSaveState.createEquipmentItem({
+				itemDefinitionId: fields.itemDefinitionId,
+				owner: fields.owner,
 			})
 
-			return `Created monster ${monster.uid}`
+			return `Created item ${item.id}`
 		},
 	})
 
 	const createCharacterForm = (): FormState => ({
-		title: 'Create Character Instance',
-		description: 'Create a character instance from a class definition.',
+		title: 'Create Player Character',
+		description: 'Create a player character from name and class type.',
 		fields: [
 			{
-				name: 'blueprintId',
-				label: 'Blueprint ID',
-				value: services.definitions.listCharacterClassDefinitions()[0]?.blueprintId ?? '',
+				name: 'classType',
+				label: 'Class Type',
+				value: 'Warrior',
 				required: true,
 			},
 			{ name: 'name', label: 'Name', value: 'Local Character', required: true },
-			{ name: 'level', label: 'Level', value: '1' },
-			{ name: 'stats', label: 'Stats JSON', value: '' },
-			{ name: 'experience', label: 'Experience', value: '0' },
 		],
 		submit: (fields) => {
-			const character = services.instances.createCharacterClass({
-				blueprintId: fields.blueprintId,
+			const character = services.gameSaveState.createPlayerCharacter({
+				classType: parseCharacterClassType(fields.classType),
 				name: fields.name,
-				level: parseOptionalNumber(fields.level),
-				stats: parseOptionalJson<Stats>(fields.stats),
-				experience: parseOptionalNumber(fields.experience),
 			})
 
-			return `Created character ${character.uid}`
+			return `Created character ${character.id}`
 		},
 	})
 
 	const updateItemForm = (): FormState => ({
-		title: 'Update Item Instance',
-		description: 'Update item extra stats using a JSON object.',
+		title: 'Patch Equipment Item',
+		description: 'Patch item definition, owner, or extra stats.',
 		fields: [
-			{ name: 'uid', label: 'UID', value: '', required: true },
+			{ name: 'id', label: 'ID', value: '', required: true },
+			{ name: 'itemDefinitionId', label: 'Item Definition ID', value: '' },
+			{ name: 'owner', label: 'Owner Character ID', value: '' },
 			{ name: 'extraStats', label: 'Extra stats JSON', value: '' },
 		],
 		submit: (fields) => {
-			const item = services.instances.updateItem(fields.uid, {
+			const item = services.gameSaveState.patchEquipmentItem(fields.id, {
+				itemDefinitionId: fields.itemDefinitionId.trim() || undefined,
+				owner: fields.owner.trim() || undefined,
 				extraStats: parseOptionalJson<Stats>(fields.extraStats),
 			})
 
-			return `Updated item ${item.uid}`
+			return `Updated item ${item.id}`
 		},
 	})
 
 	const updateCharacterForm = (): FormState => ({
-		title: 'Update Character Instance',
+		title: 'Patch Player Character',
 		description: 'Update character fields; leave blanks to preserve values.',
 		fields: [
-			{ name: 'uid', label: 'UID', value: '', required: true },
+			{ name: 'id', label: 'ID', value: '', required: true },
 			{ name: 'name', label: 'Name', value: '' },
 			{ name: 'level', label: 'Level', value: '' },
-			{ name: 'stats', label: 'Stats JSON', value: '' },
 			{ name: 'experience', label: 'Experience', value: '' },
+			{ name: 'progression', label: 'Progression JSON', value: '' },
 		],
 		submit: (fields) => {
-			const character = services.instances.updateCharacterClass(fields.uid, {
+			const character = services.gameSaveState.patchPlayerCharacter(fields.id, {
 				name: fields.name.trim() || undefined,
 				level: parseOptionalNumber(fields.level),
-				stats: parseOptionalJson<Stats>(fields.stats),
 				experience: parseOptionalNumber(fields.experience),
+				progression: parseOptionalJson(fields.progression),
 			})
 
-			return `Updated character ${character.uid}`
+			return `Updated character ${character.id}`
 		},
 	})
 
-	const deleteForm = (title: string, description: string, deleteInstance: (uid: string) => void): FormState => ({
+	const deleteForm = (title: string, description: string, deleteItem: (id: string) => void): FormState => ({
 		title,
 		description,
-		fields: [{ name: 'uid', label: 'UID', value: '', required: true }],
+		fields: [{ name: 'id', label: 'ID', value: '', required: true }],
 		submit: (fields) => {
 			openConfirm({
 				title,
-				description: `Delete ${fields.uid}?`,
+				description: `Delete ${fields.id}?`,
 				confirm: () => {
-					deleteInstance(fields.uid)
-					return `Deleted ${fields.uid}`
+					deleteItem(fields.id)
+					return `Deleted ${fields.id}`
 				},
 			})
 
@@ -476,7 +462,7 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 							'Item Definitions',
 							'Equipment item blueprints.',
 							services.definitions.listItemDefinitions().map((definition) => ({
-								label: definition.blueprintId,
+								label: definition.defId,
 								detail: definition.description,
 								hint: definition.name,
 								action: () => {
@@ -494,7 +480,7 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 							'Monster Definitions',
 							'Monster blueprints.',
 							services.definitions.listMonsterDefinitions().map((definition) => ({
-								label: definition.blueprintId,
+								label: definition.defId,
 								detail: `Level ${definition.level}`,
 								action: () => {
 									showMessage(stringifyPreview(definition))
@@ -511,7 +497,7 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 							'Character Class Definitions',
 							'Character class blueprints.',
 							services.definitions.listCharacterClassDefinitions().map((definition) => ({
-								label: definition.blueprintId,
+								label: definition.defId,
 								detail: 'Base class stats',
 								action: () => {
 									showMessage(stringifyPreview(definition))
@@ -532,16 +518,16 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 
 		return [
 			{
-				label: 'List item instances',
-				detail: 'Lists hydrated item instances.',
+				label: 'List owned items',
+				detail: 'Lists player-owned equipment items.',
 				action: () => {
 					openList(
-						'Item Instances',
-						'Hydrated item instances.',
-						services.instances.listItems().map((item) => ({
-							label: item.uid,
-							detail: item.blueprintId,
-							hint: item.name,
+						'Player Owned Items',
+						'Player-owned equipment items.',
+						services.gameSaveState.listPlayerOwnedItems().map((item) => ({
+							label: item.id,
+							detail: item.defId,
+							hint: `Owner ${item.owner}`,
 							action: () => {
 								showMessage(stringifyPreview(item))
 							},
@@ -550,33 +536,15 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 				},
 			},
 			{
-				label: 'List monster instances',
-				detail: 'Lists hydrated monster instances.',
+				label: 'List player characters',
+				detail: 'Lists player characters.',
 				action: () => {
 					openList(
-						'Monster Instances',
-						'Hydrated monster instances.',
-						services.instances.listMonsters().map((monster) => ({
-							label: monster.uid,
-							detail: monster.blueprintId,
-							hint: `Level ${monster.level}`,
-							action: () => {
-								showMessage(stringifyPreview(monster))
-							},
-						})),
-					)
-				},
-			},
-			{
-				label: 'List character instances',
-				detail: 'Lists hydrated character instances.',
-				action: () => {
-					openList(
-						'Character Instances',
-						'Hydrated character instances.',
-						services.instances.listCharacterClasses().map((character) => ({
-							label: character.uid,
-							detail: character.blueprintId,
+						'Player Characters',
+						'Player characters.',
+						services.gameSaveState.listPlayerCharacters().map((character) => ({
+							label: character.id,
+							detail: character.classType,
 							hint: `${character.name}, level ${character.level}`,
 							action: () => {
 								showMessage(stringifyPreview(character))
@@ -586,76 +554,47 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 				},
 			},
 			{
-				label: 'Get instance',
-				detail: 'Searches across every hydrated instance type.',
+				label: 'Get save state',
+				detail: 'Searches across player characters and owned items.',
 				action: () => {
-					openList('All Instances', 'Search all hydrated instances.', instanceItems())
+					openList('Game Save State', 'Search game save state.', gameSaveStateItems())
 				},
 			},
 			{
-				label: 'Create item instance',
-				detail: 'Creates an item instance from a blueprint ID.',
+				label: 'Create equipment item',
+				detail: 'Creates an owned item from a definition ID.',
 				action: () => {
 					openForm(createItemForm())
 				},
 			},
 			{
-				label: 'Create monster instance',
-				detail: 'Creates a monster instance from a blueprint ID.',
-				action: () => {
-					openForm(createMonsterForm())
-				},
-			},
-			{
-				label: 'Create character instance',
-				detail: 'Creates a character instance from a class blueprint.',
+				label: 'Create player character',
+				detail: 'Creates a player character from name and class.',
 				action: () => {
 					openForm(createCharacterForm())
 				},
 			},
 			{
-				label: 'Update item instance',
-				detail: 'Updates item extra stats by UID.',
+				label: 'Patch equipment item',
+				detail: 'Patches an owned item by ID.',
 				action: () => {
 					openForm(updateItemForm())
 				},
 			},
 			{
-				label: 'Update character instance',
-				detail: 'Updates character fields by UID.',
+				label: 'Patch player character',
+				detail: 'Patches player character state by ID.',
 				action: () => {
 					openForm(updateCharacterForm())
 				},
 			},
 			{
-				label: 'Delete item instance',
-				detail: 'Deletes an item instance by UID after confirmation.',
+				label: 'Delete equipment item',
+				detail: 'Deletes an owned item by ID after confirmation.',
 				action: () => {
 					openForm(
-						deleteForm('Delete Item Instance', 'Deletes an item instance by UID.', (uid) => {
-							services.instances.deleteItem(uid)
-						}),
-					)
-				},
-			},
-			{
-				label: 'Delete monster instance',
-				detail: 'Deletes a monster instance by UID after confirmation.',
-				action: () => {
-					openForm(
-						deleteForm('Delete Monster Instance', 'Deletes a monster instance by UID.', (uid) => {
-							services.instances.deleteMonster(uid)
-						}),
-					)
-				},
-			},
-			{
-				label: 'Delete character instance',
-				detail: 'Deletes a character instance by UID after confirmation.',
-				action: () => {
-					openForm(
-						deleteForm('Delete Character Instance', 'Deletes a character instance by UID.', (uid) => {
-							services.instances.deleteCharacterClass(uid)
+						deleteForm('Delete Equipment Item', 'Deletes an owned item by ID.', (id) => {
+							services.gameSaveState.deleteEquipmentItem(id)
 						}),
 					)
 				},
@@ -832,24 +771,27 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 					? 'Simulations'
 					: resource === 'definitions'
 						? 'Definitions'
-						: 'Instances'
+						: 'Game Save State'
 
 	return (
 		<Box flexDirection="column" padding={1}>
 			<TitleBanner />
 			<Box marginBottom={1}>
 				<Text color="gray">
-					Definitions <Text color="cyan">{services.definitions.listDefinitions().length}</Text> Instances{' '}
-					<Text color="cyan">{instanceItems().length}</Text>
+					Definitions <Text color="cyan">{services.definitions.listDefinitions().length}</Text> Game Save State{' '}
+					<Text color="cyan">{gameSaveStateItems().length}</Text>
 				</Text>
 			</Box>
-			<Box borderStyle="single" borderColor="cyan" paddingX={1}>
-				<Text color="cyan" bold>
-					MT2 Utils
-				</Text>
-				{resource !== null && <Text color="gray"> / {title}</Text>}
-				{resource === 'simulations' && <Text color="yellow"> experimental</Text>}
-			</Box>
+			{screen !== 'resources' && (
+				<Box marginBottom={1}>
+					<Text color="cyan" bold>
+						{title}
+					</Text>
+					{resource === 'simulations' && (
+						<Text color="yellow"> experimental</Text>
+					)}
+				</Box>
+			)}
 			<Box borderStyle="single" borderColor="gray" paddingX={1} paddingY={1} flexDirection="column" minHeight={10}>
 				{screen === 'form' && form !== null ? (
 					<FormView form={form} fieldIndex={fieldIndex} input={fieldInput} />

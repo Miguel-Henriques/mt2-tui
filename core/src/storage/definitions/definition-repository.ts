@@ -1,16 +1,14 @@
-import type {
-	CharacterClassBlueprint,
-	MonsterBlueprint,
-} from '../../domain/definitions/character-definitions.js'
-import type { EquipmentItemBlueprint } from '../../domain/definitions/item-definitions.js'
+import { MonsterDef } from "../../domain/definitions/character-definitions.js"
+import { CharacterClassDef } from "../../domain/definitions/character-definitions.js"
+import { ItemDef } from "../../domain/definitions/item-definitions.js"
 
 export interface DefinitionRepository {
-	listItemDefinitions(): EquipmentItemBlueprint[]
-	getItemDefinition(blueprintId: string): EquipmentItemBlueprint | undefined
-	listMonsterDefinitions(): MonsterBlueprint[]
-	getMonsterDefinition(blueprintId: string): MonsterBlueprint | undefined
-	listCharacterClassDefinitions(): CharacterClassBlueprint[]
+	listItemDefinitions(): ItemDef[]
+	getItemDefinition(defId: string): ItemDef | undefined
+	listMonsterDefinitions(): MonsterDef[]
+	getMonsterDefinition(defId: string): MonsterDef | undefined
+	listCharacterClassDefinitions(): CharacterClassDef[]
 	getCharacterClassDefinition(
-		blueprintId: string,
-	): CharacterClassBlueprint | undefined
+		defId: string,
+	): CharacterClassDef | undefined
 }

@@ -1,54 +1,73 @@
 import { relative } from 'node:path'
 
 import type {
-	CharacterClassBlueprint,
-	MonsterBlueprint,
+	CharacterClassDef,
+	MonsterDef,
 } from '../../domain/definitions/character-definitions.js'
-import type { EquipmentItemBlueprint } from '../../domain/definitions/item-definitions.js'
+import type { EquipmentItemDef } from '../../domain/definitions/item-definitions.js'
 import { DEFINITIONS_ROOT } from '../content-paths.js'
 import { readJsonFile } from '../file-json.js'
 import { walkJsonFiles } from '../walk-json-files.js'
 import type { DefinitionRepository } from './definition-repository.js'
 
+type LegacyDefinition<T> = T & {
+	blueprintId?: string
+}
+
 const relativePath = (path: string): string =>
 	relative(DEFINITIONS_ROOT, path).replace(/\\/g, '/')
 
+const normalizeDefinitionId = <T extends { defId?: string }>(
+	definition: LegacyDefinition<T>,
+): T | undefined => {
+	const defId = definition.defId ?? definition.blueprintId
+
+	if (defId === undefined) {
+		return undefined
+	}
+
+	return {
+		...definition,
+		defId,
+	}
+}
+
 export class FileDefinitionRepository implements DefinitionRepository {
-	private readonly itemDefinitions = new Map<string, EquipmentItemBlueprint>()
-	private readonly monsterDefinitions = new Map<string, MonsterBlueprint>()
+	private readonly itemDefinitions = new Map<string, EquipmentItemDef>()
+	private readonly monsterDefinitions = new Map<string, MonsterDef>()
 	private readonly characterClassDefinitions = new Map<
 		string,
-		CharacterClassBlueprint
+		CharacterClassDef
 	>()
 
 	constructor() {
 		this.loadDefinitions()
 	}
 
-	listItemDefinitions(): EquipmentItemBlueprint[] {
+	listItemDefinitions(): EquipmentItemDef[] {
 		return [...this.itemDefinitions.values()]
 	}
 
-	getItemDefinition(blueprintId: string): EquipmentItemBlueprint | undefined {
-		return this.itemDefinitions.get(blueprintId)
+	getItemDefinition(defId: string): EquipmentItemDef | undefined {
+		return this.itemDefinitions.get(defId)
 	}
 
-	listMonsterDefinitions(): MonsterBlueprint[] {
+	listMonsterDefinitions(): MonsterDef[] {
 		return [...this.monsterDefinitions.values()]
 	}
 
-	getMonsterDefinition(blueprintId: string): MonsterBlueprint | undefined {
-		return this.monsterDefinitions.get(blueprintId)
+	getMonsterDefinition(defId: string): MonsterDef | undefined {
+		return this.monsterDefinitions.get(defId)
 	}
 
-	listCharacterClassDefinitions(): CharacterClassBlueprint[] {
+	listCharacterClassDefinitions(): CharacterClassDef[] {
 		return [...this.characterClassDefinitions.values()]
 	}
 
 	getCharacterClassDefinition(
-		blueprintId: string,
-	): CharacterClassBlueprint | undefined {
-		return this.characterClassDefinitions.get(blueprintId)
+		defId: string,
+	): CharacterClassDef | undefined {
+		return this.characterClassDefinitions.get(defId)
 	}
 
 	private loadDefinitions(): void {
@@ -56,23 +75,40 @@ export class FileDefinitionRepository implements DefinitionRepository {
 			const rel = relativePath(path)
 
 			if (rel.startsWith('items/')) {
-				const definition = readJsonFile<EquipmentItemBlueprint>(path)
-				this.itemDefinitions.set(definition.blueprintId, definition)
+				const definition = normalizeDefinitionId(
+					readJsonFile<LegacyDefinition<EquipmentItemDef>>(path),
+				)
+
+				if (definition !== undefined) {
+					this.itemDefinitions.set(definition.defId, definition)
+				}
+
 				continue
 			}
 
 			if (rel.startsWith('characters/monsters/')) {
-				const definition = readJsonFile<MonsterBlueprint>(path)
-				this.monsterDefinitions.set(definition.blueprintId, definition)
+				const definition = normalizeDefinitionId(
+					readJsonFile<LegacyDefinition<MonsterDef>>(path),
+				)
+
+				if (definition !== undefined) {
+					this.monsterDefinitions.set(definition.defId, definition)
+				}
+
 				continue
 			}
 
 			if (rel.startsWith('characters/classes/')) {
-				const definition = readJsonFile<CharacterClassBlueprint>(path)
-				this.characterClassDefinitions.set(
-					definition.blueprintId,
-					definition,
+				const definition = normalizeDefinitionId(
+					readJsonFile<LegacyDefinition<CharacterClassDef>>(path),
 				)
+
+				if (definition !== undefined) {
+					this.characterClassDefinitions.set(
+						definition.defId,
+						definition,
+					)
+				}
 			}
 		}
 	}

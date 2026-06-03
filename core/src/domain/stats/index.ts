@@ -43,3 +43,15 @@ export function calculateHitDamage(initiator: { level: number, stats: Stats }, e
 }
 
 //TODO: Skill damage
+
+export function mergeStats(...sources: Stats[]): Stats {
+    const result: Stats = {}
+    for (const source of sources) {
+        for (const [key, value] of Object.entries(source)) {
+            if (value === undefined) continue
+            const statKey = key as keyof Stats
+            result[statKey] = (result[statKey] ?? 0) + value
+        }
+    }
+    return result
+}

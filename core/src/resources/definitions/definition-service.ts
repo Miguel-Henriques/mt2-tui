@@ -1,48 +1,45 @@
-import type {
-	CharacterClassBlueprint,
-	MonsterBlueprint,
-} from '../../domain/definitions/character-definitions.js'
-import type { EquipmentItemBlueprint } from '../../domain/definitions/item-definitions.js'
+import { CharacterClassDef, MonsterDef } from '../../domain/definitions/character-definitions.js'
+import { ItemDef } from '../../domain/definitions/item-definitions.js'
 import { NotFoundError } from '../../shared/errors.js'
 import type { DefinitionRepository } from '../../storage/definitions/definition-repository.js'
 import type { DefinitionSummary } from './definition-types.js'
 
 export interface DefinitionService {
 	listDefinitions(): DefinitionSummary[]
-	listItemDefinitions(): EquipmentItemBlueprint[]
-	getItemDefinition(blueprintId: string): EquipmentItemBlueprint
-	listMonsterDefinitions(): MonsterBlueprint[]
-	getMonsterDefinition(blueprintId: string): MonsterBlueprint
-	listCharacterClassDefinitions(): CharacterClassBlueprint[]
-	getCharacterClassDefinition(blueprintId: string): CharacterClassBlueprint
+	listItemDefinitions(): ItemDef[]
+	getItemDefinition(defId: string): ItemDef
+	listMonsterDefinitions(): MonsterDef[]
+	getMonsterDefinition(defId: string): MonsterDef
+	listCharacterClassDefinitions(): CharacterClassDef[]
+	getCharacterClassDefinition(defId: string): CharacterClassDef
 }
 
-const definitionName = (blueprintId: string): string =>
-	blueprintId.split('/').pop() ?? blueprintId
+const definitionName = (defId: string): string =>
+	defId.split('/').pop() ?? defId
 
 export const createDefinitionService = (
 	repository: DefinitionRepository,
 ): DefinitionService => ({
 	listDefinitions: () => [
 		...repository.listItemDefinitions().map((definition) => ({
+			defId: definition.defId,
 			kind: 'item' as const,
-			blueprintId: definition.blueprintId,
 			name: definition.name,
 		})),
 		...repository.listMonsterDefinitions().map((definition) => ({
+			defId: definition.defId,
 			kind: 'monster' as const,
-			blueprintId: definition.blueprintId,
-			name: definitionName(definition.blueprintId),
+			name: definition.name ?? definitionName(definition.defId),
 		})),
 		...repository.listCharacterClassDefinitions().map((definition) => ({
+			defId: definition.defId,
 			kind: 'character-class' as const,
-			blueprintId: definition.blueprintId,
-			name: definitionName(definition.blueprintId),
+			name: definition.name ?? definitionName(definition.defId),
 		})),
 	],
 	listItemDefinitions: () => repository.listItemDefinitions(),
-	getItemDefinition: (blueprintId) => {
-		const definition = repository.getItemDefinition(blueprintId)
+	getItemDefinition: (defId) => {
+		const definition = repository.getItemDefinition(defId)
 
 		if (definition === undefined) {
 			throw new NotFoundError()
@@ -51,8 +48,8 @@ export const createDefinitionService = (
 		return definition
 	},
 	listMonsterDefinitions: () => repository.listMonsterDefinitions(),
-	getMonsterDefinition: (blueprintId) => {
-		const definition = repository.getMonsterDefinition(blueprintId)
+	getMonsterDefinition: (defId) => {
+		const definition = repository.getMonsterDefinition(defId)
 
 		if (definition === undefined) {
 			throw new NotFoundError()
@@ -62,8 +59,8 @@ export const createDefinitionService = (
 	},
 	listCharacterClassDefinitions: () =>
 		repository.listCharacterClassDefinitions(),
-	getCharacterClassDefinition: (blueprintId) => {
-		const definition = repository.getCharacterClassDefinition(blueprintId)
+	getCharacterClassDefinition: (defId) => {
+		const definition = repository.getCharacterClassDefinition(defId)
 
 		if (definition === undefined) {
 			throw new NotFoundError()

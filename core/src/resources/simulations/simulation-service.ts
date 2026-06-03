@@ -1,4 +1,4 @@
-import type { InstanceService } from '../instances/index.js'
+import type { GameSaveStateService } from '../game-save-state/index.js'
 import type {
 	CreateSimulationInput,
 	Simulation,
@@ -10,7 +10,7 @@ export interface SimulationService {
 }
 
 export const createSimulationService = (
-	_instances: InstanceService,
+	_gameSaveState: GameSaveStateService,
 ): SimulationService => ({
 	listSimulations: () => [],
 	createSimulation: (_input) => ({

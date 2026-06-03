@@ -3,19 +3,19 @@ import {
 	type DefinitionService,
 } from './resources/definitions/index.js'
 import {
-	createInstanceService,
-	type InstanceService,
-} from './resources/instances/index.js'
+	createGameSaveStateService,
+	type GameSaveStateService,
+} from './resources/game-save-state/index.js'
 import {
 	createSimulationService,
 	type SimulationService,
 } from './resources/simulations/index.js'
 import { FileDefinitionRepository } from './storage/definitions/file-definition-repository.js'
-import { FileInstanceRepository } from './storage/instances/file-instance-repository.js'
+import { FileGameSaveStateRepository } from './storage/game-save-state/file-game-save-state-repository.js'
 
 export interface CoreServices {
 	definitions: DefinitionService
-	instances: InstanceService
+	gameSaveState: GameSaveStateService
 	simulations: SimulationService
 }
 
@@ -23,17 +23,17 @@ let coreServices: CoreServices | null = null
 
 export const createCoreServices = (): CoreServices => {
 	const definitionRepository = new FileDefinitionRepository()
-	const instanceRepository = new FileInstanceRepository()
+	const gameSaveStateRepository = new FileGameSaveStateRepository()
 	const definitions = createDefinitionService(definitionRepository)
-	const instances = createInstanceService(
+	const gameSaveState = createGameSaveStateService(
 		definitionRepository,
-		instanceRepository,
+		gameSaveStateRepository,
 	)
-	const simulations = createSimulationService(instances)
+	const simulations = createSimulationService(gameSaveState)
 
 	return {
 		definitions,
-		instances,
+		gameSaveState,
 		simulations,
 	}
 }
@@ -44,4 +44,4 @@ export const getCoreServices = (): CoreServices => {
 	return coreServices
 }
 
-export type { DefinitionService, InstanceService, SimulationService }
+export type { DefinitionService, GameSaveStateService, SimulationService }

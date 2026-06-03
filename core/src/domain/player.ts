@@ -1,6 +1,7 @@
-import { createCoreServices, getCoreServices } from "../index.js"
-import { Stats } from "./stats/index.js"
-import { CharacterClassType } from "./definitions/character-definitions.js"
+import { getCoreServices } from "../index.js"
+import { mergeStats, Stats } from "./stats/index.js"
+import { characterClassId, CharacterClassType } from "./definitions/character-definitions.js"
+import { calculateHp, calculateMagicDamage, calculateMagicDefense, calculateMp, calculatePhysicalDamage, calculatePhysicalDefense, SecondaryStats } from "./stats/secondary-stats.js"
 
 export interface PlayerAccount {
     id: string
@@ -11,34 +12,8 @@ export interface PlayerAccount {
     // warehouse: Inventory //TODO:
 }
 
-// export interface IPlayerCharacter { //TODO: Convert to class
-//     id: string
-//     accountId: string
-//     /**
-//      * Derive initialStats at runtime.
-//      * 
-//      * Pass by ref allows for ad-hoc balance changes without requiring
-//      * data migrations to prevent stale data.
-//      */
-//     classType: CharacterClassType
-//     name: string
-//     level: number
-//     experience: number
-
-//     progression: CharacterProgression
-
-//     currentHp: number
-//     currentMp: number
-
-//     //gear: EquipmentItem[]
-//     //inventory //TODO:
-
-//     get stats(): Stats
-// }
-
-export interface InstancePlayerCharacterInput {
+export interface PlayerCharacterInput {
     id: string
-    accountId: string
     /**
      * Class initialStats are derived at runtime.
      *
@@ -54,7 +29,7 @@ export interface InstancePlayerCharacterInput {
 export class PlayerCharacter {
 
     readonly id: string
-    readonly accountId: string
+    //readonly accountId: string
     readonly classType: CharacterClassType
 
     name: string
@@ -67,9 +42,9 @@ export class PlayerCharacter {
     //inventory //TODO:
     stats: Stats
 
-    constructor(input: InstancePlayerCharacterInput) {
+    constructor(input: PlayerCharacterInput) {
         this.id = input.id
-        this.accountId = input.accountId
+        //this.accountId = input.accountId
         this.classType = input.classType
         this.name = input.name
         this.level = input.level
@@ -79,18 +54,28 @@ export class PlayerCharacter {
     }
 
     private deriveEffectiveStats(): Stats {
+        const classDefId = characterClassId(this.classType)
+        const classInitialStats = getCoreServices().definitions.getCharacterClassDefinition(classDefId)
+        //TODO: gear stats
 
+        // 1. Merge stats from 3 sources: class initial stats, character progression and gear
+        const stats = mergeStats(classInitialStats.stats, this.progression.spentStatPoints)
 
+        // 2. Calculate derived secondary stats (stats whose values depends on other stats) - damage, defense, hp, mp
+        const secondaryStats: SecondaryStats = {
+            healthPoints: calculateHp(stats),
+            manaPoints: calculateMp(stats),
+            physicalDamage: calculatePhysicalDamage(this.level, stats),
+            damageSpread: stats.damageSpread ?? 0,
+            magicDamage: calculateMagicDamage(this.level, stats),
+            physicalDefense: calculatePhysicalDefense(this.level, stats),
+            magicDefense: calculateMagicDefense(this.level, stats)
+        }
 
         return {
-            ...
+            ...stats,
+            ...secondaryStats
         }
-    }
-
-    private deriveStatsFromProgression(): Stats {
-
-        const classInitialStats = getCoreServices()
-
     }
 }
 
@@ -106,43 +91,4 @@ export class PlayerCharacter {
 export interface CharacterProgression {
     availableStatsPoints: number
     spentStatPoints: Stats
-}
-
-
-export function extractStatsFromGear(gear: EquipmentItem[]): Stats {
-    return gear
-        .map(item => ({ ...item.baseStats, ...item.extraStats }))
-        .reduce((acc, curr) => ({ ...acc, ...curr }), {})
-}
-
-export function calculatePrimaryStats(characterClass: CharacterClass, gearStats: Stats): PrimaryStats {
-    return {
-        vitality: characterClass.stats.vitality! + (gearStats.vitality ?? 0),
-        intellect: characterClass.stats.intellect! + (gearStats.intellect ?? 0),
-        strength: characterClass.stats.strength! + (gearStats.strength ?? 0),
-        agility: characterClass.stats.agility! + (gearStats.agility ?? 0)
-    }
-}
-
-export function calculateSecondaryStats(characterClass: CharacterClass, primaryStats: PrimaryStats, gearStats: Stats, level: number): SecondaryStats {
-    return {
-        healthPoints: calculateHp(characterClass.stats.healthPoints!, primaryStats.vitality!, gearStats.healthPoints ?? 0),
-        skillPoints: calculateSp(characterClass.stats.skillPoints!, primaryStats.intellect!, gearStats.skillPoints ?? 0),
-        physicalDamage: calculatePhysicalDamage(level, primaryStats.strength!, primaryStats.intellect!, gearStats.physicalDamage ?? 0),
-        damageSpread: gearStats.damageSpread ?? 0,
-        magicDamage: calculateMagicDamage(level, primaryStats.intellect!, gearStats.magicDamage ?? 0),
-        physicalDefense: calculatePhysicalDefense(level, primaryStats.vitality!, gearStats.physicalDefense ?? 0),
-        magicDefense: calculateMagicDefense(level, primaryStats.intellect!, primaryStats.vitality!, gearStats.magicDefense ?? 0)
-    }
-}
-
-//TODO:
-export function calculateOtherStats(): OtherStats {
-    return {
-        attackSpeed: 100,
-        movementSpeed: 100,
-        castingSpeed: 100,
-        damageReduction: 100,
-        cooldownReduction: 100
-    }
 }
