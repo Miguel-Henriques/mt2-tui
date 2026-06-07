@@ -8,6 +8,7 @@
 		"build": "tsc",
 		"dev": "tsx src/clients/tui/index.tsx",
 		"dev:tui": "tsx src/clients/tui/index.tsx",
+		"sprite:ansi": "tsx scripts/png-to-ansi-sprite.ts",
 		"start": "tsx src/clients/tui/index.tsx",
 		"tui": "tsx src/clients/tui/index.tsx"
 	},

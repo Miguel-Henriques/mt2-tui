@@ -1,0 +1,23 @@
+{
+	"defId": "items/weapons/sirius-sword+0",
+	"name": "Sírius Sword",
+	"description": "",
+	"type": "weapon",
+	"subType": "sword",
+	"wearableClasses": [
+		"warrior",
+		"ninja",
+		"sura"
+	],
+	"wearableFromLevel": 80,
+	"baseStats": {
+		"physicalDamage": 237,
+		"magicDamage": 155,
+		"damageSpread": 40,
+		"attackSpeed": 15,
+		"strongAgainst": {
+			"demons": 2,
+			"half-humans": 2
+		}
+	}
+}

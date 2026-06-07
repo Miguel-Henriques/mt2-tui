@@ -1,11 +1,15 @@
-import React, { useMemo, useState } from 'react'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 import { Box, Text, useApp, useInput, useWindowSize } from 'ink'
+import React, { useMemo, useState } from 'react'
 
 import type { CoreServices } from '../../index.js'
 import type { CharacterClassDef, CharacterClassType, MonsterDef } from '../../domain/definitions/character-definitions.js'
 import type { EquipmentItemDef, ItemDef } from '../../domain/definitions/item-definitions.js'
 import type { PlayerCharacter } from '../../domain/player.js'
 import type { Stats } from '../../domain/stats/index.js'
+import { ASSETS_ROOT } from '../../storage/content-paths.js'
 import { supportsEmoji } from './supports-emoji.js'
 
 type Screen = 'menu' | 'form' | 'list' | 'game' | 'message'
@@ -15,6 +19,7 @@ interface SelectableItem {
 	label: string
 	detail: string
 	hint?: string
+	iconLines?: string[]
 	disabled?: boolean
 	statusLabel?: string
 	action(): void
@@ -116,6 +121,12 @@ const statIcons: Record<string, string> = {
 
 const showStatIcons = supportsEmoji()
 
+const fallbackCatalogIconLines = [
+	'\u001b[38;2;160;160;160m+---+\u001b[0m',
+	'\u001b[38;2;220;220;220m| ? |\u001b[0m',
+	'\u001b[38;2;160;160;160m+---+\u001b[0m',
+]
+
 const primaryStatKeys: readonly (keyof Stats)[] = ['vitality', 'intellect', 'strength', 'dexterity']
 
 const secondaryStatKeys: readonly (keyof Stats)[] = ['healthPoints', 'manaPoints', 'physicalDamage', 'magicDamage', 'physicalDefense', 'magicDefense']
@@ -202,9 +213,8 @@ const SelectionList = ({ items, selectedIndex, search }: { items: SelectableItem
 
 const SelectionDetails = ({ item }: { item?: SelectableItem }) => {
 	const lines = item?.detail.split('\n') ?? ['Choose an option to see what it does.']
-
-	return (
-		<Box flexDirection="column" marginLeft={4} flexGrow={1}>
+	const details = (
+		<Box flexDirection="column" flexGrow={1}>
 			<Text color="magenta" bold>
 				Details
 			</Text>
@@ -217,6 +227,23 @@ const SelectionDetails = ({ item }: { item?: SelectableItem }) => {
 				<Box marginTop={1}>
 					<Text color="gray">{item.hint}</Text>
 				</Box>
+			)}
+		</Box>
+	)
+
+	return (
+		<Box flexDirection="row" marginLeft={4} flexGrow={1}>
+			{item?.iconLines === undefined ? (
+				details
+			) : (
+				<>
+					<Box flexDirection="column" marginRight={4}>
+						{item.iconLines.map((line, index) => (
+							<Text key={`${line}-${index}`}>{line}</Text>
+						))}
+					</Box>
+					{details}
+				</>
 			)}
 		</Box>
 	)
@@ -432,6 +459,33 @@ const parseCharacterClassType = (value: string): CharacterClassType => {
 }
 
 const isEquipmentItemDef = (definition: ItemDef): definition is EquipmentItemDef => 'baseStats' in definition
+
+const normalizeCatalogIconDefId = (defId: string): string => {
+	const parts = defId.split('/')
+	const fileName = parts.at(-1)
+
+	if (fileName === undefined) {
+		return defId
+	}
+
+	const normalizedFileName = fileName.replace(/\+\d+$/, '')
+
+	return [...parts.slice(0, -1), normalizedFileName].join('/')
+}
+
+const readCatalogIconLines = (defId: string): string[] => {
+	const normalizedDefId = normalizeCatalogIconDefId(defId)
+	const iconPath = join(ASSETS_ROOT, `${normalizedDefId}-md.ansi`)
+
+	if (!existsSync(iconPath)) {
+		return fallbackCatalogIconLines
+	}
+
+	const lines = readFileSync(iconPath, 'utf8').replace(/\r\n/g, '\n').split('\n')
+	const lastLine = lines[lines.length - 1]
+
+	return lastLine === '' ? lines.slice(0, -1) : lines
+}
 
 const formatCharacterDetails = (character: PlayerCharacter): string =>
 	[
@@ -665,6 +719,7 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 				label: definition.name ?? definitionName(definition.defId),
 				detail: formatClassDefinitionDetails(definition),
 				hint: definition.defId,
+				iconLines: readCatalogIconLines(definition.defId),
 				action: () => {},
 			})),
 		})
@@ -679,6 +734,7 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 				label: definition.name ?? definitionName(definition.defId),
 				detail: formatMonsterDefinitionDetails(definition),
 				hint: definition.defId,
+				iconLines: readCatalogIconLines(definition.defId),
 				action: () => {},
 			})),
 		})
@@ -693,6 +749,7 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 				label: definition.name,
 				detail: formatEquipmentDefinitionDetails(definition),
 				hint: definition.defId,
+				iconLines: readCatalogIconLines(definition.defId),
 				action: () => {},
 			})),
 		})
