@@ -1,7 +1,9 @@
 import { getCoreServices } from "../index.js"
-import { mergeStats, Stats } from "./stats/index.js"
+import { calculateHitDamage, mergeStats, Stats } from "./stats/index.js"
 import { characterClassId, CharacterClassType } from "./definitions/character-definitions.js"
 import { calculateHp, calculateMagicDamage, calculateMagicDefense, calculateMp, calculatePhysicalDamage, calculatePhysicalDefense, SecondaryStats } from "./stats/secondary-stats.js"
+import { Character } from "./index.js"
+import { PrimaryStats } from "./stats/primary-stats.js"
 
 export interface PlayerAccount {
     id: string
@@ -26,13 +28,17 @@ export interface PlayerCharacterInput {
     progression: CharacterProgression
 }
 
-export class PlayerCharacter {
+/**
+ * Persisted in game save state. Ephemeral in simulations.
+ */
+export class PlayerCharacter implements Character {
 
     readonly id: string
     //readonly accountId: string
     readonly classType: CharacterClassType
 
     name: string
+    currentHp: number
 
     level: number
     experience: number
@@ -51,6 +57,7 @@ export class PlayerCharacter {
         this.experience = input.experience
         this.progression = input.progression
         this.stats = this.deriveEffectiveStats()
+        this.currentHp = this.stats.healthPoints ?? 0
     }
 
     private deriveEffectiveStats(): Stats {
@@ -76,6 +83,20 @@ export class PlayerCharacter {
             ...stats,
             ...secondaryStats
         }
+    }
+
+    attack(enemies: Character[]): void {
+        const damage = calculateHitDamage(this)
+
+        for (const enemy of enemies) {
+            enemy.takeHitDamage(damage)
+        }
+    }
+
+    takeHitDamage(damage: number): void {
+        const physicalDefense = calculatePhysicalDefense(this.level, this.stats);
+        const absorbedDamage = damage - physicalDefense
+        this.currentHp -= absorbedDamage
     }
 }
 

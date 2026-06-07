@@ -2,10 +2,10 @@
 	"defId": "characters/classes/sura",
 	"stats": {
 		"healthPoints": 650,
-		"skillPoints": 200,
+		"manaPoints": 200,
 		"vitality": 3,
 		"intellect": 5,
 		"strength": 5,
-		"agility": 3
+		"dexterity": 3
 	}
 }

@@ -2,10 +2,10 @@
 	"defId": "characters/classes/warrior",
 	"stats": {
 		"healthPoints": 600,
-		"skillPoints": 200,
+		"manaPoints": 200,
 		"vitality": 4,
 		"intellect": 3,
 		"strength": 6,
-		"agility": 3
+		"dexterity": 3
 	}
 }

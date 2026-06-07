@@ -24,9 +24,9 @@ export type Stats = PrimaryStats & SecondaryStats & ExtraStats & SpeedStats;
  * 
  * Original formula: https://pt-wiki.metin2.gameforge.com/index.php/Dano
  */
-export function calculateHitDamage(initiator: { level: number, stats: Stats }, enemy: { level: number, stats: Stats }): number {
+export function calculateHitDamage(initiator: { level: number, stats: Stats }): number {
     let initiatorPhysicalDamage = calculatePhysicalDamage(initiator.level, initiator.stats);
-    const enemyPhysicalDefense = calculatePhysicalDefense(enemy.level, enemy.stats);
+
 
     if (initiator.stats.averageDamage) {
         initiatorPhysicalDamage *= 1 + initiator.stats.averageDamage / 100
@@ -39,8 +39,10 @@ export function calculateHitDamage(initiator: { level: number, stats: Stats }, e
     //TODO: crit
     //TODO: piercing
 
-    return damageRoll - enemyPhysicalDefense
+    return damageRoll
 }
+
+
 
 //TODO: Skill damage
 
