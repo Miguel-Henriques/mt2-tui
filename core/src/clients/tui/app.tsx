@@ -56,11 +56,11 @@ interface TuiAppProps {
 const characterClassTypes: CharacterClassType[] = ['Ninja', 'Shaman', 'Sura', 'Warrior']
 
 const titleLines = [
-	' __  __ _____ ____     ____                           ',
-	'|  \\/  |_   _|___ \\   / ___|  ___ _ ____   _____ _ __ ',
-	"| |\\/| | | |   __) |  \\___ \\ / _ \\ '__\\ \\ / / _ \\ '__|",
-	'| |  | | | |  / __/    ___) |  __/ |   \\ V /  __/ |   ',
-	'|_|  |_| |_| |_____|  |____/ \\___|_|    \\_/ \\___|_|   ',
+	'    __  ____________      ________  ______',
+	'   /  |/  /_  __/__ \\    /_  __/ / / /  _/',
+	'  / /|_/ / / /  __/ /     / / / / / // /  ',
+	' / /  / / / /  / __/     / / / /_/ // /   ',
+	'/_/  /_/ /_/  /____/    /_/  \\____/___/   ',
 ]
 
 const statLabels: Record<string, string> = {
@@ -118,14 +118,7 @@ const showStatIcons = supportsEmoji()
 
 const primaryStatKeys: readonly (keyof Stats)[] = ['vitality', 'intellect', 'strength', 'dexterity']
 
-const secondaryStatKeys: readonly (keyof Stats)[] = [
-	'healthPoints',
-	'manaPoints',
-	'physicalDamage',
-	'magicDamage',
-	'physicalDefense',
-	'magicDefense',
-]
+const secondaryStatKeys: readonly (keyof Stats)[] = ['healthPoints', 'manaPoints', 'physicalDamage', 'magicDamage', 'physicalDefense', 'magicDefense']
 
 const speedStatKeys: readonly (keyof Stats)[] = ['attackSpeed', 'movementSpeed', 'castingSpeed', 'cooldownReduction']
 
@@ -306,8 +299,7 @@ const formatStatDisplayValue = (key: string, value: number, stats: Stats): strin
 }
 
 const formatStatLine = (key: string, value: number | string, stats?: Stats): string => {
-	const displayValue =
-		stats !== undefined && typeof value === 'number' ? formatStatDisplayValue(key, value, stats) : String(value)
+	const displayValue = stats !== undefined && typeof value === 'number' ? formatStatDisplayValue(key, value, stats) : String(value)
 
 	return `${formatStatPrefix(key)}${formatLabel(key)}: ${displayValue}`
 }
