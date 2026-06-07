@@ -475,7 +475,7 @@ const normalizeCatalogIconDefId = (defId: string): string => {
 
 const readCatalogIconLines = (defId: string): string[] => {
 	const normalizedDefId = normalizeCatalogIconDefId(defId)
-	const iconPath = join(ASSETS_ROOT, `${normalizedDefId}-md.ansi`)
+	const iconPath = join(ASSETS_ROOT, `${normalizedDefId}-sm.ansi`)
 
 	if (!existsSync(iconPath)) {
 		return fallbackCatalogIconLines

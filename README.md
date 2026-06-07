@@ -70,7 +70,7 @@ core/content/assets/items/sirius-sword.ansi
 ```
 
 Standard sizes:
-sm - 15x15
+sm - 16x16
 md - 24x24
 lg - 32x32
 
