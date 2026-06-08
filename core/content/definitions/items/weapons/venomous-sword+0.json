@@ -1,0 +1,18 @@
+{
+	"defId": "items/weapons/venomous-sword+0",
+	"name": "Venomous Sword",
+	"description": "",
+	"type": "weapon",
+	"subType": "sword",
+	"wearableClasses": [
+		"warrior",
+		"ninja",
+		"sura"
+	],
+	"wearableFromLevel": 75,
+	"baseStats": {
+		"physicalDamage": 100,
+		"damageSpread": 40,
+		"attackSpeed": 17
+	}
+}

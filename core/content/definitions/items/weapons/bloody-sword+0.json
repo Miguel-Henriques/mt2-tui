@@ -1,0 +1,19 @@
+{
+	"defId": "items/weapons/bloody-sword+0",
+	"name": "Bloody Sword",
+	"description": "",
+	"type": "weapon",
+	"subType": "sword",
+	"wearableClasses": [
+		"warrior",
+		"ninja",
+		"sura"
+	],
+	"wearableFromLevel": 45,
+	"baseStats": {
+		"physicalDamage": 65,
+		"magicDamage": 69,
+		"damageSpread": 22,
+		"attackSpeed": 25
+	}
+}

@@ -49,6 +49,13 @@ interface ListState {
 	backTarget: BackTarget
 }
 
+interface SelectionListProps {
+	items: SelectableItem[]
+	selectedIndex: number
+	search: string
+	visibleRows: number
+}
+
 interface MessageState {
 	text: string
 	backTarget: BackTarget
@@ -59,6 +66,8 @@ interface TuiAppProps {
 }
 
 const characterClassTypes: CharacterClassType[] = ['Ninja', 'Shaman', 'Sura', 'Warrior']
+const minimumSelectionRows = 5
+const selectionRowsReservedForChrome = 18
 
 const titleLines = [
 	'    __  ____________      ________  ______',
@@ -187,29 +196,71 @@ const FooterHelp = ({ screen }: { screen: Screen }) => {
 	)
 }
 
-const SelectionList = ({ items, selectedIndex, search }: { items: SelectableItem[]; selectedIndex: number; search: string }) => (
-	<Box flexDirection="column" minWidth={28}>
-		{search.length > 0 && (
-			<Text color="gray">
-				Filter: <Text color="yellow">{search}</Text>
-			</Text>
-		)}
-		{items.map((item, index) => {
-			const isSelected = index === selectedIndex
-			const color = item.disabled === true ? 'gray' : undefined
+const SelectionList = ({
+	items,
+	selectedIndex,
+	search,
+	visibleRows,
+}: SelectionListProps) => {
+	const searchRows = search.length > 0 ? 1 : 0
+	const maximumItemRows = Math.max(1, visibleRows - searchRows)
+	const safeSelectedIndex = Math.min(
+		Math.max(0, selectedIndex),
+		Math.max(0, items.length - 1),
+	)
+	const maximumStartIndex = Math.max(0, items.length - maximumItemRows)
+	const maximumCenteredStartIndex = Math.max(
+		0,
+		safeSelectedIndex - Math.floor(maximumItemRows / 2),
+	)
+	const maximumStartIndexForSelection = Math.min(
+		maximumStartIndex,
+		maximumCenteredStartIndex,
+	)
+	const hasMoreItems = maximumStartIndexForSelection + maximumItemRows < items.length
+	const itemRows = hasMoreItems ? Math.max(1, maximumItemRows - 1) : maximumItemRows
+	const maxStartIndex = Math.max(0, items.length - itemRows)
+	const centeredStartIndex = Math.max(
+		0,
+		safeSelectedIndex - Math.floor(itemRows / 2),
+	)
+	const startIndex = Math.min(maxStartIndex, centeredStartIndex)
+	const endIndex = startIndex + itemRows
+	const visibleItems = items.slice(startIndex, endIndex)
 
-			return (
-				<Text key={`${item.label}-${index}`}>
-					<Text color={isSelected ? 'green' : 'gray'}>{isSelected ? '› ' : '  '}</Text>
-					<Text color={isSelected ? 'green' : color} bold={isSelected && item.disabled !== true}>
-						{item.label}
-					</Text>
-					{item.statusLabel !== undefined && <Text color="yellow"> ({item.statusLabel})</Text>}
+	return (
+		<Box flexDirection="column" minWidth={28}>
+			{search.length > 0 && (
+				<Text color="gray">
+					Filter: <Text color="yellow">{search}</Text>
 				</Text>
-			)
-		})}
-	</Box>
-)
+			)}
+			{visibleItems.length === 0 ? (
+				<Text color="gray">No matches</Text>
+			) : (
+				visibleItems.map((item, index) => {
+					const itemIndex = startIndex + index
+					const isSelected = itemIndex === selectedIndex
+					const color = item.disabled === true ? 'gray' : undefined
+
+					return (
+						<Text key={`${item.label}-${itemIndex}`}>
+							<Text color={isSelected ? 'green' : 'gray'}>{isSelected ? '› ' : '  '}</Text>
+							<Text
+								color={isSelected ? 'green' : color}
+								bold={isSelected && item.disabled !== true}
+							>
+								{item.label}
+							</Text>
+							{item.statusLabel !== undefined && <Text color="yellow"> ({item.statusLabel})</Text>}
+						</Text>
+					)
+				})
+			)}
+			{hasMoreItems && <Text color="gray">(more)</Text>}
+		</Box>
+	)
+}
 
 const SelectionDetails = ({ item }: { item?: SelectableItem }) => {
 	const lines = item?.detail.split('\n') ?? ['Choose an option to see what it does.']
@@ -428,18 +479,25 @@ const GameActionsPanel = ({
 	selectedIndex,
 	selectedItem,
 	showCompactDetails,
+	visibleRows,
 }: {
 	items: SelectableItem[]
 	selectedIndex: number
 	selectedItem?: SelectableItem
 	showCompactDetails: boolean
+	visibleRows: number
 }) => (
 	<Box borderStyle="single" borderColor="gray" flexDirection="column" flexGrow={1} paddingX={1} paddingY={1}>
 		<Text color="magenta" bold>
 			Actions
 		</Text>
 		<Box flexDirection={showCompactDetails ? 'column' : 'row'}>
-			<SelectionList items={items} selectedIndex={selectedIndex} search="" />
+			<SelectionList
+				items={items}
+				selectedIndex={selectedIndex}
+				search=""
+				visibleRows={visibleRows}
+			/>
 			<Box marginTop={showCompactDetails ? 1 : 0}>
 				<ActionDescription item={selectedItem} marginLeft={showCompactDetails ? 0 : 4} />
 			</Box>
@@ -533,7 +591,7 @@ const formatEquipmentDefinitionDetails = (definition: ItemDef): string => {
 
 export const TuiApp = ({ services }: TuiAppProps) => {
 	const { exit } = useApp()
-	const { columns } = useWindowSize()
+	const { columns, rows } = useWindowSize()
 	const [screen, setScreen] = useState<Screen>('menu')
 	const [selectedIndex, setSelectedIndex] = useState(0)
 	const [search, setSearch] = useState('')
@@ -987,6 +1045,7 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 	})
 
 	const showCompactDetails = columns < 90
+	const visibleSelectionRows = Math.max(minimumSelectionRows, rows - selectionRowsReservedForChrome)
 	const title = screen === 'menu' ? 'Main Menu' : screen === 'game' ? 'Game' : (list?.title ?? form?.title ?? 'Result')
 
 	return (
@@ -1017,19 +1076,30 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 								selectedIndex={selectedIndex}
 								selectedItem={selectedItem}
 								showCompactDetails={showCompactDetails}
+								visibleRows={visibleSelectionRows}
 							/>
 						</Box>
 					</Box>
 				) : showCompactDetails ? (
 					<Box flexDirection="column">
-						<SelectionList items={currentItems} selectedIndex={selectedIndex} search={search} />
+						<SelectionList
+							items={currentItems}
+							selectedIndex={selectedIndex}
+							search={search}
+							visibleRows={visibleSelectionRows}
+						/>
 						<Box marginTop={1}>
 							<SelectionDetails item={selectedItem} />
 						</Box>
 					</Box>
 				) : (
 					<Box flexDirection="row">
-						<SelectionList items={currentItems} selectedIndex={selectedIndex} search={search} />
+						<SelectionList
+							items={currentItems}
+							selectedIndex={selectedIndex}
+							search={search}
+							visibleRows={visibleSelectionRows}
+						/>
 						<SelectionDetails item={selectedItem} />
 					</Box>
 				)}

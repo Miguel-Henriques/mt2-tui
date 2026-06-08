@@ -1,0 +1,19 @@
+{
+	"defId": "items/weapons/nymph-sword+0",
+	"name": "Nymph Sword",
+	"description": "",
+	"type": "weapon",
+	"subType": "sword",
+	"wearableClasses": [
+		"warrior",
+		"ninja",
+		"sura"
+	],
+	"wearableFromLevel": 65,
+	"baseStats": {
+		"physicalDamage": 102,
+		"magicDamage": 69,
+		"damageSpread": 36,
+		"attackSpeed": 17
+	}
+}

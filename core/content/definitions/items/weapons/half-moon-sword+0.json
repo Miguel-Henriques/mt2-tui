@@ -1,0 +1,19 @@
+{
+	"defId": "items/weapons/half-moon-sword+0",
+	"name": "Half Moon Sword",
+	"description": "",
+	"type": "weapon",
+	"subType": "sword",
+	"wearableClasses": [
+		"warrior",
+		"ninja",
+		"sura"
+	],
+	"wearableFromLevel": 60,
+	"baseStats": {
+		"physicalDamage": 72,
+		"magicDamage": 74,
+		"damageSpread": 36,
+		"attackSpeed": 15
+	}
+}

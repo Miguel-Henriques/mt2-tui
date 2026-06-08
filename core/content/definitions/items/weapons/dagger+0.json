@@ -1,0 +1,16 @@
+{
+	"defId": "items/weapons/dagger+0",
+	"name": "Dagger",
+	"description": "",
+	"type": "weapon",
+	"subType": "dagger",
+	"wearableClasses": [
+		"ninja"
+	],
+	"wearableFromLevel": 1,
+	"baseStats": {
+		"physicalDamage": 8,
+		"damageSpread": 3,
+		"attackSpeed": 28
+	}
+}

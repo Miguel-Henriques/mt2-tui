@@ -1,0 +1,16 @@
+{
+	"defId": "items/weapons/glave+0",
+	"name": "Glave",
+	"description": "",
+	"type": "weapon",
+	"subType": "two-handed-sword",
+	"wearableClasses": [
+		"warrior"
+	],
+	"wearableFromLevel": 1,
+	"baseStats": {
+		"physicalDamage": 14,
+		"damageSpread": 8,
+		"attackSpeed": 26
+	}
+}

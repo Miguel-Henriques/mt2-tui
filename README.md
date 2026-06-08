@@ -70,7 +70,7 @@ core/content/assets/items/sirius-sword.ansi
 ```
 
 Standard sizes:
-sm - 16x16
+sm - 16x16 for swords, 16x8 for daggers, 16x24 for two-handed swords
 md - 24x24
 lg - 32x32
 
@@ -78,20 +78,20 @@ Run the converter from the `core` package:
 
 ```bash
 cd core
-npm run sprite:ansi -- ./content/assets/items/sirius-sword.png --width 24 --height 24
+npm run sprite:ansi -- ./content/assets/items/sirius-sword.png --width 24
 ```
 
 Write the generated ANSI sprite to a file:
 
 ```bash
-npm run sprite:ansi -- ./content/assets/items/sirius-sword.png --width 24 --height 24 --out ./content/assets/items/sirius-sword.ansi
+npm run sprite:ansi -- ./content/assets/items/sirius-sword.png --width 24 --out ./content/assets/items/sirius-sword.ansi
 ```
 
 Use `--width` and `--height` to tune the terminal-cell size. Use
 `--alpha-threshold` if faint transparent pixels create speckles around the icon:
 
 ```bash
-npm run sprite:ansi -- ./content/assets/items/sirius-sword.png --width 24 --height 24 --alpha-threshold 32
+npm run sprite:ansi -- ./content/assets/items/sirius-sword.png --width 24 --alpha-threshold 32
 ```
 
 The converter prints truecolor ANSI half-block art. This is useful for testing

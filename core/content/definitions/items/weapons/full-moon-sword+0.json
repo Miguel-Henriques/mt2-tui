@@ -1,0 +1,19 @@
+{
+	"defId": "items/weapons/full-moon-sword+0",
+	"name": "Full Moon Sword",
+	"description": "",
+	"type": "weapon",
+	"subType": "sword",
+	"wearableClasses": [
+		"warrior",
+		"ninja",
+		"sura"
+	],
+	"wearableFromLevel": 30,
+	"baseStats": {
+		"physicalDamage": 57,
+		"magicDamage": 62,
+		"damageSpread": 16,
+		"attackSpeed": 15
+	}
+}

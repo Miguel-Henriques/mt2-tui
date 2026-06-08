@@ -1,0 +1,19 @@
+{
+	"defId": "items/weapons/silve-sword+0",
+	"name": "Silver Sword",
+	"description": "",
+	"type": "weapon",
+	"subType": "sword",
+	"wearableClasses": [
+		"warrior",
+		"ninja",
+		"sura"
+	],
+	"wearableFromLevel": 25,
+	"baseStats": {
+		"physicalDamage": 36,
+		"magicDamage": 38,
+		"damageSpread": 10,
+		"attackSpeed": 30
+	}
+}

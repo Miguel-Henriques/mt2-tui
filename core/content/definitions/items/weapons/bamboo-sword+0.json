@@ -1,6 +1,6 @@
 {
-	"defId": "items/weapons/sword+0",
-	"name": "Sword",
+	"defId": "items/weapons/bamboo-sword+0",
+	"name": "Bamboo Sword",
 	"description": "",
 	"type": "weapon",
 	"subType": "sword",
@@ -9,11 +9,11 @@
 		"ninja",
 		"sura"
 	],
-	"wearableFromLevel": 1,
+	"wearableFromLevel": 15,
 	"baseStats": {
-		"physicalDamage": 13,
-		"magicDamage": 15,
+		"physicalDamage": 22,
+		"magicDamage": 25,
 		"damageSpread": 4,
-		"attackSpeed": 22
+		"attackSpeed": 21
 	}
 }

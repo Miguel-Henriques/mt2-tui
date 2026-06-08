@@ -1,0 +1,19 @@
+{
+	"defId": "items/weapons/large-sword+0",
+	"name": "Large Sword",
+	"description": "",
+	"type": "weapon",
+	"subType": "sword",
+	"wearableClasses": [
+		"warrior",
+		"ninja",
+		"sura"
+	],
+	"wearableFromLevel": 20,
+	"baseStats": {
+		"physicalDamage": 25,
+		"magicDamage": 20,
+		"damageSpread": 10,
+		"attackSpeed": 15
+	}
+}

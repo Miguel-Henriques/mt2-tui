@@ -1,0 +1,19 @@
+{
+	"defId": "items/weapons/battle-sword+0",
+	"name": "Battle Sword",
+	"description": "",
+	"type": "weapon",
+	"subType": "sword",
+	"wearableClasses": [
+		"warrior",
+		"ninja",
+		"sura"
+	],
+	"wearableFromLevel": 65,
+	"baseStats": {
+		"physicalDamage": 100,
+		"magicDamage": 65,
+		"damageSpread": 40,
+		"attackSpeed": 15
+	}
+}
