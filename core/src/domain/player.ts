@@ -89,7 +89,8 @@ export class PlayerCharacter implements Character {
         const damage = calculateHitDamage(this)
 
         for (const enemy of enemies) {
-            enemy.takeHitDamage(damage)
+            const inflictedDamage = enemy.takeHitDamage(damage)
+            console.log(`Player | ${this.name} dealt ${inflictedDamage} damage to ${enemy.name} (${enemy.currentHp}/${enemy.stats.healthPoints}).`)
         }
     }
 
@@ -97,6 +98,7 @@ export class PlayerCharacter implements Character {
         const physicalDefense = calculatePhysicalDefense(this.level, this.stats);
         const absorbedDamage = damage - physicalDefense
         this.currentHp -= absorbedDamage
+        console.log(`Player | ${this.name} took ${absorbedDamage} damage (${this.currentHp}/${this.stats.healthPoints}).`)
     }
 }
 

@@ -37,9 +37,10 @@ export class Monster implements Character {
         }
     }
 
-    takeHitDamage(damage: number): void {
+    takeHitDamage(damage: number): number {
         const physicalDefense = calculatePhysicalDefense(this.level, this.stats);
         const absorbedDamage = damage - physicalDefense
         this.currentHp -= absorbedDamage
+        return absorbedDamage
     }
 }
