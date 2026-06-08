@@ -50,9 +50,9 @@ export const createSimulationService = (
 		if (input.player instanceof PlayerCharacter) {
 
 			const player = input.player
-			let mobsAlive = [...spawnedMobs]
-			const events: SimulationEvent[] = []
+			const events: SimulationEvent[] = seedPvMEvents(player, spawnedMobs)
 			const abortController = new AbortController()
+			let mobsAlive = [...spawnedMobs]
 
 			// The combat loop is a single synchronous process to avoid race conditions
 			while (events.length > 0) {
@@ -64,8 +64,10 @@ export const createSimulationService = (
 				if (event.actor instanceof PlayerCharacter && event.type === 'AttackEvent') {
 					event.actor.attack(mobsAlive)
 
-					mobsAlive = mobsAlive.filter(mob => mob.currentHp > 0) //TODO: signal mob death
-					if (mobsAlive.length === 0) {
+					// update mobsAlive after attack cycle
+					mobsAlive = mobsAlive.filter(mob => mob.currentHp > 0)
+
+					if (mobsAlive.length === 0) {  //TODO: signal mob death
 						console.log('Player killed all mobs')
 						status = 'completed'
 						break
@@ -98,15 +100,18 @@ export const createSimulationService = (
 				// Reorder events by execution time
 				events.sort(sortEventByTimestampAsc)
 			}
+
+			return {
+				uid,
+				status,
+			}
 		}
 
 		return {
 			uid,
-			status,
+			status: 'failed',
 		}
 	}
-
-
 })
 
 /**
@@ -134,4 +139,24 @@ const sleep = async (ms: number, signal: AbortSignal) => {
 
 const sortEventByTimestampAsc = (a: SimulationEvent, b: SimulationEvent): number => {
 	return a.at - b.at
+}
+
+const seedPvMEvents = (player: PlayerCharacter, mobs: Monster[]): SimulationEvent[] => {
+	const seedEvents: SimulationEvent[] = []
+
+	seedEvents.push({
+		actor: player,
+		type: 'AttackEvent',
+		at: Date.now() + attackCooldownMs(player.stats.attackSpeed ?? 100),
+	})
+
+	for (const mob of mobs) {
+		seedEvents.push({
+			actor: mob,
+			type: 'AttackEvent',
+			at: Date.now() + attackCooldownMs(mob.stats.attackSpeed ?? 100),
+		})
+	}
+
+	return seedEvents.sort(sortEventByTimestampAsc)
 }
