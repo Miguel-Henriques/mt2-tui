@@ -2,7 +2,7 @@ import { getCoreServices } from "../index.js"
 import { calculateHitDamage, mergeStats, Stats } from "./stats/index.js"
 import { characterClassId, CharacterClassType } from "./definitions/character-definitions.js"
 import { calculateHp, calculateMagicDamage, calculateMagicDefense, calculateMp, calculatePhysicalDamage, calculatePhysicalDefense, SecondaryStats } from "./stats/secondary-stats.js"
-import { Character } from "./index.js"
+import { AttackResult, Character } from "./index.js"
 import { PrimaryStats } from "./stats/primary-stats.js"
 
 export interface PlayerAccount {
@@ -85,20 +85,29 @@ export class PlayerCharacter implements Character {
         }
     }
 
-    attack(enemies: Character[]): void {
+    attack(enemies: Character[]): AttackResult[] {
         const damage = calculateHitDamage(this)
+        const results: AttackResult[] = []
 
         for (const enemy of enemies) {
             const inflictedDamage = enemy.takeHitDamage(damage)
-            console.log(`Player | ${this.name} dealt ${inflictedDamage} damage to ${enemy.name} (${enemy.currentHp}/${enemy.stats.healthPoints}).`)
+            results.push({
+                attackerName: this.name,
+                defenderName: enemy.name,
+                damage: inflictedDamage,
+                defenderCurrentHp: enemy.currentHp,
+                defenderMaxHp: enemy.stats.healthPoints ?? 0,
+            })
         }
+
+        return results
     }
 
-    takeHitDamage(damage: number): void {
+    takeHitDamage(damage: number): number {
         const physicalDefense = calculatePhysicalDefense(this.level, this.stats);
-        const absorbedDamage = damage - physicalDefense
+        const absorbedDamage = Math.max(0, damage - physicalDefense)
         this.currentHp -= absorbedDamage
-        console.log(`Player | ${this.name} took ${absorbedDamage} damage (${this.currentHp}/${this.stats.healthPoints}).`)
+        return absorbedDamage
     }
 }
 

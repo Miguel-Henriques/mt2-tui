@@ -3,6 +3,9 @@ import { PrimaryStats } from "./primary-stats.js";
 import { calculatePhysicalDamage, calculatePhysicalDefense, SecondaryStats } from "./secondary-stats.js";
 import { SpeedStats } from "./speed-stats.js";
 
+/**
+ * TODO: Resistances (Element System) - https://fr-wiki.metin2.gameforge.com/index.php/Syst%C3%A8me_d%27%C3%A9l%C3%A9ments
+ */
 export type Stats = PrimaryStats & SecondaryStats & ExtraStats & SpeedStats;
 
 /**

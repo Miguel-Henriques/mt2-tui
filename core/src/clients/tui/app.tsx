@@ -9,10 +9,11 @@ import type { CharacterClassDef, CharacterClassType, MonsterDef } from '../../do
 import type { EquipmentItemDef, ItemDef } from '../../domain/definitions/item-definitions.js'
 import type { PlayerCharacter } from '../../domain/player.js'
 import type { Stats } from '../../domain/stats/index.js'
+import type { SnapshotCharacterState, PVMCombatSimulationUpdate, SimulationStatus } from '../../resources/simulations/index.js'
 import { ASSETS_ROOT } from '../../storage/content-paths.js'
 import { supportsEmoji } from './supports-emoji.js'
 
-type Screen = 'menu' | 'form' | 'list' | 'game' | 'message'
+type Screen = 'menu' | 'form' | 'list' | 'game' | 'message' | 'combat-setup' | 'combat'
 type BackTarget = 'menu' | 'catalog' | 'game'
 
 interface SelectableItem {
@@ -23,6 +24,7 @@ interface SelectableItem {
 	disabled?: boolean
 	statusLabel?: string
 	action(): void
+	decrement?(): void
 }
 
 interface FormField {
@@ -59,6 +61,13 @@ interface SelectionListProps {
 interface MessageState {
 	text: string
 	backTarget: BackTarget
+}
+
+interface CombatPaneState {
+	status: SimulationStatus
+	player: SnapshotCharacterState
+	enemies: SnapshotCharacterState[]
+	messages: string[]
 }
 
 interface TuiAppProps {
@@ -196,34 +205,17 @@ const FooterHelp = ({ screen }: { screen: Screen }) => {
 	)
 }
 
-const SelectionList = ({
-	items,
-	selectedIndex,
-	search,
-	visibleRows,
-}: SelectionListProps) => {
+const SelectionList = ({ items, selectedIndex, search, visibleRows }: SelectionListProps) => {
 	const searchRows = search.length > 0 ? 1 : 0
 	const maximumItemRows = Math.max(1, visibleRows - searchRows)
-	const safeSelectedIndex = Math.min(
-		Math.max(0, selectedIndex),
-		Math.max(0, items.length - 1),
-	)
+	const safeSelectedIndex = Math.min(Math.max(0, selectedIndex), Math.max(0, items.length - 1))
 	const maximumStartIndex = Math.max(0, items.length - maximumItemRows)
-	const maximumCenteredStartIndex = Math.max(
-		0,
-		safeSelectedIndex - Math.floor(maximumItemRows / 2),
-	)
-	const maximumStartIndexForSelection = Math.min(
-		maximumStartIndex,
-		maximumCenteredStartIndex,
-	)
+	const maximumCenteredStartIndex = Math.max(0, safeSelectedIndex - Math.floor(maximumItemRows / 2))
+	const maximumStartIndexForSelection = Math.min(maximumStartIndex, maximumCenteredStartIndex)
 	const hasMoreItems = maximumStartIndexForSelection + maximumItemRows < items.length
 	const itemRows = hasMoreItems ? Math.max(1, maximumItemRows - 1) : maximumItemRows
 	const maxStartIndex = Math.max(0, items.length - itemRows)
-	const centeredStartIndex = Math.max(
-		0,
-		safeSelectedIndex - Math.floor(itemRows / 2),
-	)
+	const centeredStartIndex = Math.max(0, safeSelectedIndex - Math.floor(itemRows / 2))
 	const startIndex = Math.min(maxStartIndex, centeredStartIndex)
 	const endIndex = startIndex + itemRows
 	const visibleItems = items.slice(startIndex, endIndex)
@@ -246,10 +238,7 @@ const SelectionList = ({
 					return (
 						<Text key={`${item.label}-${itemIndex}`}>
 							<Text color={isSelected ? 'green' : 'gray'}>{isSelected ? '› ' : '  '}</Text>
-							<Text
-								color={isSelected ? 'green' : color}
-								bold={isSelected && item.disabled !== true}
-							>
+							<Text color={isSelected ? 'green' : color} bold={isSelected && item.disabled !== true}>
 								{item.label}
 							</Text>
 							{item.statusLabel !== undefined && <Text color="yellow"> ({item.statusLabel})</Text>}
@@ -492,18 +481,52 @@ const GameActionsPanel = ({
 			Actions
 		</Text>
 		<Box flexDirection={showCompactDetails ? 'column' : 'row'}>
-			<SelectionList
-				items={items}
-				selectedIndex={selectedIndex}
-				search=""
-				visibleRows={visibleRows}
-			/>
+			<SelectionList items={items} selectedIndex={selectedIndex} search="" visibleRows={visibleRows} />
 			<Box marginTop={showCompactDetails ? 1 : 0}>
 				<ActionDescription item={selectedItem} marginLeft={showCompactDetails ? 0 : 4} />
 			</Box>
 		</Box>
 	</Box>
 )
+
+const CombatPane = ({ combat }: { combat: CombatPaneState }) => {
+	const visibleMessages = combat.messages.slice(-10)
+
+	return (
+		<Box flexDirection="column">
+			<Text color="magenta" bold>
+				Player
+			</Text>
+			<Text color="gray">
+				{combat.player.name} HP {combat.player.currentHp}/{combat.player.maxHp} Attack {combat.player.attack} Defense {combat.player.defense}
+			</Text>
+			<Box flexDirection="column" marginTop={1}>
+				<Text color="magenta" bold>
+					Alive monsters
+				</Text>
+				{combat.enemies.length === 0 ? (
+					<Text color="gray">No monsters alive.</Text>
+				) : (
+					combat.enemies.map((enemy) => (
+						<Text key={enemy.id} color="gray">
+							{enemy.name} HP {enemy.currentHp}/{enemy.maxHp}
+						</Text>
+					))
+				)}
+			</Box>
+			<Box flexDirection="column" marginTop={1}>
+				<Text color="magenta" bold>
+					Fight log <Text color="gray">({combat.status})</Text>
+				</Text>
+				{visibleMessages.map((message, index) => (
+					<Text key={`${message}-${index}`} color="gray">
+						{message}
+					</Text>
+				))}
+			</Box>
+		</Box>
+	)
+}
 
 const parseCharacterClassType = (value: string): CharacterClassType => {
 	const normalized = value.trim().toLowerCase()
@@ -602,6 +625,8 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 	const [fieldInput, setFieldInput] = useState('')
 	const [message, setMessage] = useState<MessageState | null>(null)
 	const [activeCharacter, setActiveCharacter] = useState<PlayerCharacter | null>(null)
+	const [combatMonsterCounts, setCombatMonsterCounts] = useState<Record<string, number>>({})
+	const [combat, setCombat] = useState<CombatPaneState | null>(null)
 
 	const resetSelection = () => {
 		setSelectedIndex(0)
@@ -622,6 +647,16 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 		setList(null)
 		setForm(null)
 		setMessage(null)
+		resetSelection()
+	}
+
+	const openCombatSetup = () => {
+		setScreen('combat-setup')
+		setList(null)
+		setForm(null)
+		setMessage(null)
+		setCombat(null)
+		setCombatMonsterCounts({})
 		resetSelection()
 	}
 
@@ -813,6 +848,98 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 		})
 	}
 
+	const incrementCombatMonsterCount = (defId: string) => {
+		setCombatMonsterCounts((counts) => ({
+			...counts,
+			[defId]: (counts[defId] ?? 0) + 1,
+		}))
+	}
+
+	const decrementCombatMonsterCount = (defId: string) => {
+		setCombatMonsterCounts((counts) => {
+			const count = counts[defId] ?? 0
+
+			if (count <= 1) {
+				const { [defId]: _removedCount, ...nextCounts } = counts
+				return nextCounts
+			}
+
+			return {
+				...counts,
+				[defId]: count - 1,
+			}
+		})
+	}
+
+	const combatEnemyIds = (): string[] => Object.entries(combatMonsterCounts).flatMap(([defId, count]) => Array.from({ length: count }, () => defId))
+
+	const handleCombatUpdate = (update: PVMCombatSimulationUpdate) => {
+		setCombat((previousCombat) => ({
+			status: update.status,
+			player: update.player,
+			enemies: update.enemies,
+			messages: [...(previousCombat?.messages ?? []), update.message],
+		}))
+	}
+
+	const startPVMCombat = () => {
+		if (activeCharacter === null) {
+			showMessage('Load or create a character before starting combat.', 'menu')
+			return
+		}
+
+		const enemies = combatEnemyIds()
+
+		if (enemies.length === 0) {
+			showMessage('Choose at least one monster before starting combat.', 'game')
+			return
+		}
+
+		setScreen('combat')
+		setList(null)
+		setForm(null)
+		setMessage(null)
+		resetSelection()
+
+		void services.simulations
+			.createPVMCombatSimulation({
+				player: activeCharacter,
+				enemies,
+				onUpdate: handleCombatUpdate,
+			})
+			.catch((err: unknown) => {
+				showMessage(err instanceof Error ? err.message : String(err), 'game')
+			})
+	}
+
+	const combatSetupItems = (): SelectableItem[] => {
+		const enemies = combatEnemyIds()
+		const monsterItems = services.definitions.listMonsterDefinitions().map((definition) => {
+			const count = combatMonsterCounts[definition.defId] ?? 0
+
+			return {
+				label: definition.name ?? definitionName(definition.defId),
+				detail: [formatMonsterDefinitionDetails(definition), '', 'Enter adds one monster. Backspace removes one monster.'].join('\n'),
+				hint: definition.defId,
+				iconLines: readCatalogIconLines(definition.defId),
+				statusLabel: count > 0 ? `${count} selected` : undefined,
+				action: () => incrementCombatMonsterCount(definition.defId),
+				decrement: () => decrementCombatMonsterCount(definition.defId),
+			}
+		})
+
+		return [
+			...monsterItems,
+			{
+				label: 'Start Combat',
+				detail: 'Initiate combat with the selected monster pack.',
+				disabled: enemies.length === 0,
+				statusLabel: `${enemies.length} monster${enemies.length === 1 ? '' : 's'}`,
+				action: startPVMCombat,
+			},
+		]
+	}
+
 	const menuItems = (): SelectableItem[] => [
 		{
 			label: 'New Game',
@@ -847,11 +974,9 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			action: () => {},
 		},
 		{
-			label: 'Fight',
-			detail: 'Combat is planned but not implemented yet.',
-			disabled: true,
-			statusLabel: 'Coming soon',
-			action: () => {},
+			label: 'Combat (PvM)',
+			detail: "Test your character's true power against a configurable pack of monsters.",
+			action: openCombatSetup,
 		},
 		{
 			label: 'Equip gear',
@@ -870,7 +995,16 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 	]
 
 	const currentItems = useMemo(() => {
-		const source = screen === 'menu' ? menuItems() : screen === 'list' ? (list?.items ?? []) : screen === 'game' ? gameActions() : []
+		const source =
+			screen === 'menu'
+				? menuItems()
+				: screen === 'list'
+					? (list?.items ?? [])
+					: screen === 'game'
+						? gameActions()
+						: screen === 'combat-setup'
+							? combatSetupItems()
+							: []
 
 		if (search.length === 0 || screen !== 'list') {
 			return source
@@ -878,7 +1012,7 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 
 		const normalized = search.toLowerCase()
 		return source.filter((item) => `${item.label} ${item.detail} ${item.hint ?? ''}`.toLowerCase().includes(normalized))
-	}, [screen, list, search])
+	}, [screen, list, search, combatMonsterCounts])
 
 	const selectedItem = currentItems[selectedIndex]
 
@@ -899,6 +1033,11 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 
 		if (screen === 'message' && message !== null) {
 			openBackTarget(message.backTarget)
+			return
+		}
+
+		if ((screen === 'combat-setup' || screen === 'combat') && activeCharacter !== null) {
+			openGame()
 			return
 		}
 
@@ -1039,6 +1178,11 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			return
 		}
 
+		if ((key.backspace || key.delete) && screen === 'combat-setup') {
+			selectedItem?.decrement?.()
+			return
+		}
+
 		if (key.return && selectedItem !== undefined && selectedItem.disabled !== true) {
 			selectedItem.action()
 		}
@@ -1046,7 +1190,16 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 
 	const showCompactDetails = columns < 90
 	const visibleSelectionRows = Math.max(minimumSelectionRows, rows - selectionRowsReservedForChrome)
-	const title = screen === 'menu' ? 'Main Menu' : screen === 'game' ? 'Game' : (list?.title ?? form?.title ?? 'Result')
+	const title =
+		screen === 'menu'
+			? 'Main Menu'
+			: screen === 'game'
+				? 'Game'
+				: screen === 'combat-setup'
+					? 'Combat (PvM)'
+					: screen === 'combat'
+						? 'Combat'
+						: (list?.title ?? form?.title ?? 'Result')
 
 	return (
 		<Box flexDirection="column" padding={1}>
@@ -1067,6 +1220,26 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 					<FormView form={form} fieldIndex={fieldIndex} input={fieldInput} />
 				) : screen === 'message' && message !== null ? (
 					<Text color="gray">{message.text}</Text>
+				) : screen === 'combat-setup' ? (
+					showCompactDetails ? (
+						<Box flexDirection="column">
+							<SelectionList items={currentItems} selectedIndex={selectedIndex} search="" visibleRows={visibleSelectionRows} />
+							<Box marginTop={1}>
+								<SelectionDetails item={selectedItem} />
+							</Box>
+						</Box>
+					) : (
+						<Box flexDirection="row">
+							<SelectionList items={currentItems} selectedIndex={selectedIndex} search="" visibleRows={visibleSelectionRows} />
+							<SelectionDetails item={selectedItem} />
+						</Box>
+					)
+				) : screen === 'combat' ? (
+					combat === null ? (
+						<Text color="gray">Starting combat...</Text>
+					) : (
+						<CombatPane combat={combat} />
+					)
 				) : screen === 'game' && activeCharacter !== null ? (
 					<Box flexDirection={showCompactDetails ? 'column' : 'row'}>
 						<CharacterSummary character={activeCharacter} />
@@ -1082,24 +1255,14 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 					</Box>
 				) : showCompactDetails ? (
 					<Box flexDirection="column">
-						<SelectionList
-							items={currentItems}
-							selectedIndex={selectedIndex}
-							search={search}
-							visibleRows={visibleSelectionRows}
-						/>
+						<SelectionList items={currentItems} selectedIndex={selectedIndex} search={search} visibleRows={visibleSelectionRows} />
 						<Box marginTop={1}>
 							<SelectionDetails item={selectedItem} />
 						</Box>
 					</Box>
 				) : (
 					<Box flexDirection="row">
-						<SelectionList
-							items={currentItems}
-							selectedIndex={selectedIndex}
-							search={search}
-							visibleRows={visibleSelectionRows}
-						/>
+						<SelectionList items={currentItems} selectedIndex={selectedIndex} search={search} visibleRows={visibleSelectionRows} />
 						<SelectionDetails item={selectedItem} />
 					</Box>
 				)}

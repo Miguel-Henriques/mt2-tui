@@ -1,4 +1,3 @@
-import { Monster } from "../../domain/monster.js"
 import { PlayerCharacter, PlayerCharacterInput } from "../../domain/player.js"
 import { PrimaryStats } from "../../domain/stats/primary-stats.js"
 
@@ -25,4 +24,24 @@ export interface CreatePVMCombatSimulationInput {
 	 * List of monster definition IDs
 	 */
 	enemies: string[]
+	onUpdate?(update: PVMCombatSimulationUpdate): void
+}
+
+export interface SnapshotCharacterState {
+	/**
+	 * Unique identifier of the character in the simulation
+	 */
+	id: string
+	name: string
+	currentHp: number
+	maxHp: number
+	attack: number
+	defense: number
+}
+
+export interface PVMCombatSimulationUpdate {
+	message: string
+	status: SimulationStatus
+	player: SnapshotCharacterState
+	enemies: SnapshotCharacterState[]
 }

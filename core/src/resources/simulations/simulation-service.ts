@@ -5,6 +5,7 @@ import type {
 	CreateSimulationInput,
 	Simulation,
 	SimulationStatus,
+	SnapshotCharacterState,
 } from './simulation-types.js'
 import { PlayerCharacter } from '../../domain/player.js'
 import { Monster } from '../../domain/monster.js'
@@ -44,7 +45,6 @@ export const createSimulationService = (
 		let status: SimulationStatus = 'pending'
 
 		const spawnedMobs = input.enemies.map(mobDef => new Monster(mobDef))
-		console.log('Spawning mobs: ', spawnedMobs.map(mob => mob.name))
 
 		//TODO: Input Player instance of PlayerCharacterInput
 		if (input.player instanceof PlayerCharacter) {
@@ -54,6 +54,8 @@ export const createSimulationService = (
 			const abortController = new AbortController()
 			let mobsAlive = [...spawnedMobs]
 
+			emitUpdate(input, `Combat started against ${toStringCharactersList(mobsAlive)}.`, status, player, mobsAlive)
+
 			// The combat loop is a single synchronous process to avoid race conditions
 			while (events.length > 0) {
 				const event = events.shift()!
@@ -62,14 +64,29 @@ export const createSimulationService = (
 
 				// Player attack event
 				if (event.actor instanceof PlayerCharacter && event.type === 'AttackEvent') {
-					event.actor.attack(mobsAlive)
+					const attackResults = event.actor.attack(mobsAlive)
+
+					for (const result of attackResults) {
+						emitUpdate(
+							input,
+							`Player dealt ${result.damage} damage to ${result.defenderName} (${result.defenderCurrentHp}/${result.defenderMaxHp}).`,
+							status,
+							player,
+							mobsAlive,
+						)
+					}
 
 					// update mobsAlive after attack cycle
+					const defeatedMobs = mobsAlive.filter(mob => mob.currentHp <= 0)
 					mobsAlive = mobsAlive.filter(mob => mob.currentHp > 0)
 
-					if (mobsAlive.length === 0) {  //TODO: signal mob death
-						console.log('Player killed all mobs')
+					for (const mob of defeatedMobs) {
+						emitUpdate(input, `${mob.name} was defeated.`, status, player, mobsAlive)
+					}
+
+					if (mobsAlive.length === 0) {
 						status = 'completed'
+						emitUpdate(input, 'Player defeated all enemies.', status, player, mobsAlive)
 						break
 					}
 
@@ -82,11 +99,26 @@ export const createSimulationService = (
 
 				// Mob attack events
 				else if (event.actor instanceof Monster && event.type === 'AttackEvent') {
-					event.actor.attack([player])
+					// discard scheduled attack event if mob is no longer alive
+					if (!mobsAlive.some(mob => mob.id === event.actor.id)) {
+						continue
+					}
+
+					const attackResults = event.actor.attack([player])
+
+					for (const result of attackResults) {
+						emitUpdate(
+							input,
+							`Player took ${result.damage} damage from ${result.attackerName} (${result.defenderCurrentHp}/${result.defenderMaxHp}).`,
+							status,
+							player,
+							mobsAlive,
+						)
+					}
 
 					if (player.currentHp <= 0) {
-						console.log('Player has died')
 						status = 'completed'
+						emitUpdate(input, 'Player has died.', status, player, mobsAlive)
 						break
 					}
 
@@ -134,7 +166,9 @@ const sleep = async (ms: number, signal: AbortSignal) => {
 		return
 	}
 
-	return setTimeout(() => { }, ms)
+	await new Promise<void>((resolve) => {
+		setTimeout(resolve, Math.max(0, ms))
+	})
 }
 
 const sortEventByTimestampAsc = (a: SimulationEvent, b: SimulationEvent): number => {
@@ -160,3 +194,30 @@ const seedPvMEvents = (player: PlayerCharacter, mobs: Monster[]): SimulationEven
 
 	return seedEvents.sort(sortEventByTimestampAsc)
 }
+
+const snapshotCharacterState = (character: PlayerCharacter | Monster): SnapshotCharacterState => ({
+	id: character.id,
+	name: character.name,
+	currentHp: character.currentHp,
+	maxHp: character.stats.healthPoints ?? 0,
+	attack: character.stats.physicalDamage ?? 0,
+	defense: character.stats.physicalDefense ?? 0,
+})
+
+const emitUpdate = (
+	input: CreatePVMCombatSimulationInput,
+	message: string,
+	status: SimulationStatus,
+	player: PlayerCharacter,
+	enemies: Monster[],
+) => {
+	input.onUpdate?.({
+		message,
+		status,
+		player: snapshotCharacterState(player),
+		enemies: enemies.map(snapshotCharacterState),
+	})
+}
+
+const toStringCharactersList = (combatants: Monster[]): string =>
+	combatants.map(combatant => combatant.name).join(', ')
