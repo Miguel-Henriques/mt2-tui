@@ -14,7 +14,8 @@ import { ASSETS_ROOT } from '../../storage/content-paths.js'
 import { supportsEmoji } from './supports-emoji.js'
 
 type Screen = 'menu' | 'form' | 'list' | 'game' | 'message' | 'combat-setup' | 'combat'
-type BackTarget = 'menu' | 'catalog' | 'game' | 'mobs'
+type BackTarget = 'menu' | 'catalog' | 'equipment' | 'game' | 'mobs'
+type EquipmentCategoryId = 'weapons' | 'armour' | 'helmets' | 'shoes' | 'belts' | 'earrings' | 'necklaces' | 'gloves' | 'shields' | 'bracelets'
 type MonsterSubtypeId = 'animals' | 'metins' | 'bosses' | 'orcs' | 'demons'
 
 interface SelectableItem {
@@ -104,6 +105,63 @@ const monsterSubtypes: {
 	{
 		id: 'demons',
 		label: 'Demons',
+	},
+]
+
+const equipmentCategories: {
+	id: EquipmentCategoryId
+	label: string
+	type: string
+}[] = [
+	{
+		id: 'weapons',
+		label: 'Weapons',
+		type: 'weapon',
+	},
+	{
+		id: 'armour',
+		label: 'Armour',
+		type: 'armour',
+	},
+	{
+		id: 'helmets',
+		label: 'Helmets',
+		type: 'helmet',
+	},
+	{
+		id: 'shoes',
+		label: 'Shoes',
+		type: 'shoe',
+	},
+	{
+		id: 'belts',
+		label: 'Belts',
+		type: 'belt',
+	},
+	{
+		id: 'earrings',
+		label: 'Earrings',
+		type: 'earring',
+	},
+	{
+		id: 'necklaces',
+		label: 'Necklaces',
+		type: 'necklace',
+	},
+	{
+		id: 'gloves',
+		label: 'Gloves',
+		type: 'glove',
+	},
+	{
+		id: 'shields',
+		label: 'Shields',
+		type: 'shield',
+	},
+	{
+		id: 'bracelets',
+		label: 'Bracelets',
+		type: 'bracelet',
 	},
 ]
 
@@ -424,31 +482,12 @@ const formatStats = (stats: Stats): string => {
 
 const definitionName = (defId: string): string => defId.split('/').pop() ?? defId
 
-const monsterSubtypeLabel = (subtypeId: MonsterSubtypeId): string =>
-	monsterSubtypes.find((subtype) => subtype.id === subtypeId)?.label ?? subtypeId
+const monsterSubtypeLabel = (subtypeId: MonsterSubtypeId): string => monsterSubtypes.find((subtype) => subtype.id === subtypeId)?.label ?? subtypeId
 
-const monsterSubtypePrefix = (subtypeId: MonsterSubtypeId): string =>
-	`characters/monsters/${subtypeId}/`
+const monsterSubtypePrefix = (subtypeId: MonsterSubtypeId): string => `characters/monsters/${subtypeId}/`
 
-const filterMonsterDefinitionsBySubtype = (
-	definitions: MonsterDef[],
-	subtypeId: MonsterSubtypeId,
-): MonsterDef[] =>
-	definitions.filter((definition) =>
-		definition.defId.startsWith(monsterSubtypePrefix(subtypeId)),
-	)
-
-const getStatEntries = (stats: Stats, keys: readonly (keyof Stats)[]): [keyof Stats, number][] =>
-	keys.reduce<[keyof Stats, number][]>((entries, key) => {
-		const value = stats[key]
-
-		if (value === undefined) {
-			return entries
-		}
-
-		entries.push([key, value])
-		return entries
-	}, [])
+const filterMonsterDefinitionsBySubtype = (definitions: MonsterDef[], subtypeId: MonsterSubtypeId): MonsterDef[] =>
+	definitions.filter((definition) => definition.defId.startsWith(monsterSubtypePrefix(subtypeId)))
 
 const StatSection = ({ title, stats, keys, titleDetail }: { title: string; stats: Stats; keys: readonly (keyof Stats)[]; titleDetail?: string }) => {
 	const entries = getStatEntries(stats, keys)
@@ -651,6 +690,35 @@ const parseCharacterClassType = (value: string): CharacterClassType => {
 
 const isEquipmentItemDef = (definition: ItemDef): definition is EquipmentItemDef => 'baseStats' in definition
 
+const equipmentCategoryLabel = (categoryId: EquipmentCategoryId): string =>
+	equipmentCategories.find((category) => category.id === categoryId)?.label ?? categoryId
+
+const equipmentCategoryPrefix = (categoryId: EquipmentCategoryId): string => `items/${categoryId}/`
+
+const filterEquipmentDefinitionsByCategory = (definitions: ItemDef[], categoryId: EquipmentCategoryId): ItemDef[] => {
+	const category = equipmentCategories.find((item) => item.id === categoryId)
+
+	return definitions.filter((definition) => {
+		if (definition.defId.startsWith(equipmentCategoryPrefix(categoryId))) {
+			return true
+		}
+
+		return category !== undefined && isEquipmentItemDef(definition) && definition.type === category.type
+	})
+}
+
+const getStatEntries = (stats: Stats, keys: readonly (keyof Stats)[]): [keyof Stats, number][] =>
+	keys.reduce<[keyof Stats, number][]>((entries, key) => {
+		const value = stats[key]
+
+		if (value === undefined) {
+			return entries
+		}
+
+		entries.push([key, value])
+		return entries
+	}, [])
+
 const normalizeCatalogIconDefId = (defId: string): string => {
 	const parts = defId.split('/')
 	const fileName = parts.at(-1)
@@ -735,8 +803,7 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 	const [fieldInput, setFieldInput] = useState('')
 	const [message, setMessage] = useState<MessageState | null>(null)
 	const [activeCharacter, setActiveCharacter] = useState<PlayerCharacter | null>(null)
-	const [combatMonsterSubtype, setCombatMonsterSubtype] =
-		useState<MonsterSubtypeId | null>(null)
+	const [combatMonsterSubtype, setCombatMonsterSubtype] = useState<MonsterSubtypeId | null>(null)
 	const [combatMonsterCounts, setCombatMonsterCounts] = useState<Record<string, number>>({})
 	const [combat, setCombat] = useState<CombatPaneState | null>(null)
 	const [combatLogScrollOffset, setCombatLogScrollOffset] = useState(0)
@@ -817,6 +884,11 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 
 		if (backTarget === 'mobs') {
 			openMonsterCatalog()
+			return
+		}
+
+		if (backTarget === 'equipment') {
+			openEquipmentCatalog()
 			return
 		}
 
@@ -915,9 +987,9 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 					action: openMonsterCatalog,
 				},
 				{
-					label: 'Gear',
+					label: 'Equipment',
 					detail: 'Browse equipment definitions.',
-					action: openGearCatalog,
+					action: openEquipmentCatalog,
 				},
 				{
 					label: 'Items',
@@ -953,10 +1025,7 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			description: 'Browse monster definitions by subtype.',
 			backTarget: 'catalog',
 			items: monsterSubtypes.map((subtype) => {
-				const count = filterMonsterDefinitionsBySubtype(
-					definitions,
-					subtype.id,
-				).length
+				const count = filterMonsterDefinitionsBySubtype(definitions, subtype.id).length
 
 				return {
 					label: subtype.label,
@@ -971,10 +1040,7 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 
 	const openMonsterSubtypeCatalog = (subtypeId: MonsterSubtypeId) => {
 		const label = monsterSubtypeLabel(subtypeId)
-		const definitions = filterMonsterDefinitionsBySubtype(
-			services.definitions.listMonsterDefinitions(),
-			subtypeId,
-		)
+		const definitions = filterMonsterDefinitionsBySubtype(services.definitions.listMonsterDefinitions(), subtypeId)
 		const items =
 			definitions.length === 0
 				? [
@@ -1001,18 +1067,53 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 		})
 	}
 
-	const openGearCatalog = () => {
+	const openEquipmentCatalog = () => {
+		const definitions = services.definitions.listItemDefinitions()
+
 		openList({
-			title: 'Gear',
-			description: 'Equipment definitions.',
+			title: 'Equipment',
+			description: 'Browse equipment definitions by category.',
 			backTarget: 'catalog',
-			items: services.definitions.listItemDefinitions().map((definition) => ({
-				label: definition.name,
-				detail: formatEquipmentDefinitionDetails(definition),
-				hint: definition.defId,
-				iconLines: readCatalogIconLines(definition.defId),
-				action: () => {},
-			})),
+			items: equipmentCategories.map((category) => {
+				const count = filterEquipmentDefinitionsByCategory(definitions, category.id).length
+
+				return {
+					label: category.label,
+					detail: `Browse ${category.label.toLowerCase()} equipment definitions.`,
+					hint: `${count} definition${count === 1 ? '' : 's'}`,
+					statusLabel: `${count}`,
+					action: () => openEquipmentCategoryCatalog(category.id),
+				}
+			}),
+		})
+	}
+
+	const openEquipmentCategoryCatalog = (categoryId: EquipmentCategoryId) => {
+		const label = equipmentCategoryLabel(categoryId)
+		const definitions = filterEquipmentDefinitionsByCategory(services.definitions.listItemDefinitions(), categoryId)
+		const items =
+			definitions.length === 0
+				? [
+						{
+							label: `No ${label.toLowerCase()} equipment`,
+							detail: `Add equipment definitions under ${equipmentCategoryPrefix(categoryId)}.`,
+							disabled: true,
+							action: () => {},
+						},
+					]
+				: definitions.map((definition) => ({
+						label: definition.name,
+						detail: formatEquipmentDefinitionDetails(definition),
+						hint: definition.defId,
+						iconLines: readCatalogIconLines(definition.defId),
+						action: () => {},
+					}))
+
+		openList({
+			title: `Equipment > ${label}`,
+			description: `${label} equipment definitions.`,
+			backTarget: 'equipment',
+			items,
 		})
 	}
 
@@ -1041,14 +1142,8 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 
 	const combatEnemyIds = (): string[] => Object.entries(combatMonsterCounts).flatMap(([defId, count]) => Array.from({ length: count }, () => defId))
 
-	const combatMonsterSelectionCountForSubtype = (
-		definitions: MonsterDef[],
-		subtypeId: MonsterSubtypeId,
-	): number =>
-		filterMonsterDefinitionsBySubtype(definitions, subtypeId).reduce(
-			(count, definition) => count + (combatMonsterCounts[definition.defId] ?? 0),
-			0,
-		)
+	const combatMonsterSelectionCountForSubtype = (definitions: MonsterDef[], subtypeId: MonsterSubtypeId): number =>
+		filterMonsterDefinitionsBySubtype(definitions, subtypeId).reduce((count, definition) => count + (combatMonsterCounts[definition.defId] ?? 0), 0)
 
 	const handleCombatUpdate = (update: PVMCombatSimulationUpdate) => {
 		setCombat((previousCombat) => ({
@@ -1097,21 +1192,14 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 
 		if (combatMonsterSubtype === null) {
 			const subtypeItems = monsterSubtypes.map((subtype) => {
-				const definitionCount = filterMonsterDefinitionsBySubtype(
-					definitions,
-					subtype.id,
-				).length
-				const selectedCount = combatMonsterSelectionCountForSubtype(
-					definitions,
-					subtype.id,
-				)
+				const definitionCount = filterMonsterDefinitionsBySubtype(definitions, subtype.id).length
+				const selectedCount = combatMonsterSelectionCountForSubtype(definitions, subtype.id)
 
 				return {
 					label: subtype.label,
 					detail: `Choose ${subtype.label.toLowerCase()} monsters for PvM combat.`,
 					hint: `${definitionCount} monster${definitionCount === 1 ? '' : 's'}`,
-					statusLabel:
-						selectedCount > 0 ? `${selectedCount} selected` : `${definitionCount}`,
+					statusLabel: selectedCount > 0 ? `${selectedCount} selected` : `${definitionCount}`,
 					action: () => openCombatMonsterSubtype(subtype.id),
 				}
 			})
@@ -1128,10 +1216,7 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			]
 		}
 
-		const monsterDefinitions = filterMonsterDefinitionsBySubtype(
-			definitions,
-			combatMonsterSubtype,
-		)
+		const monsterDefinitions = filterMonsterDefinitionsBySubtype(definitions, combatMonsterSubtype)
 		const monsterItems = monsterDefinitions.map((definition) => {
 			const count = combatMonsterCounts[definition.defId] ?? 0
 
@@ -1192,7 +1277,7 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 		},
 		{
 			label: 'Game Catalog',
-			detail: 'Browse class, mob, and gear definitions.',
+			detail: 'Browse class, mob, and equipment definitions.',
 			action: openCatalogMenu,
 		},
 		{
@@ -1218,15 +1303,15 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			action: openCombatSetup,
 		},
 		{
-			label: 'Equip gear',
+			label: 'Equip equipment',
 			detail: 'Equipment management is planned but not implemented yet.',
 			disabled: true,
 			statusLabel: 'Coming soon',
 			action: () => {},
 		},
 		{
-			label: 'Improve gear',
-			detail: 'Gear improvement is planned but not implemented yet.',
+			label: 'Improve equipment',
+			detail: 'Equipment improvement is planned but not implemented yet.',
 			disabled: true,
 			statusLabel: 'Coming soon',
 			action: () => {},

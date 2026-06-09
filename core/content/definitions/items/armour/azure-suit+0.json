@@ -1,0 +1,13 @@
+{
+	"defId": "items/armour/azure-suit+0",
+	"name": "Azure Suit",
+	"description": "",
+	"type": "armour",
+	"wearableClasses": [
+		"ninja"
+	],
+	"wearableFromLevel": 1,
+	"baseStats": {
+		"physicalDefense": 12
+	}
+}

@@ -107,6 +107,10 @@ full converter guide for details.
 
 - [PNG to ANSI sprite converter](core/docs/00-png-to-ansi-sprite-converter.md)
 
+## References
+
+https://en-wiki.metin2.gameforge.com/index.php/Ninja/armour
+
 ## License
 
 MIT
