@@ -1,9 +1,9 @@
 import { getCoreServices } from "../index.js"
 import { calculateHitDamage, mergeStats, Stats } from "./stats/index.js"
 import { characterClassId, CharacterClassType } from "./definitions/character-definitions.js"
-import { calculateHp, calculateMagicDamage, calculateMagicDefense, calculateMp, calculatePhysicalDamage, calculatePhysicalDefense, SecondaryStats } from "./stats/secondary-stats.js"
+import { calculateHp, calculateMagicDefense, calculateMp, calculatePhysicalDefense, SecondaryStats } from "./stats/secondary-stats.js"
 import { AttackResult, Character } from "./index.js"
-import { PrimaryStats } from "./stats/primary-stats.js"
+import { calculatePrimaryMagicDamage, calculatePrimaryPhysicalDamage, PrimaryStats } from "./stats/primary-stats.js"
 
 export interface PlayerAccount {
     id: string
@@ -72,9 +72,9 @@ export class PlayerCharacter implements Character {
         const secondaryStats: SecondaryStats = {
             healthPoints: calculateHp(stats),
             manaPoints: calculateMp(stats),
-            physicalDamage: calculatePhysicalDamage(this.level, stats),
+            physicalDamage: calculatePrimaryPhysicalDamage(this.level, stats, this.classType) + (stats.physicalDamage ?? 0),
             damageSpread: stats.damageSpread ?? 0,
-            magicDamage: calculateMagicDamage(this.level, stats),
+            magicDamage: calculatePrimaryMagicDamage(this.level, stats) + (stats.magicDamage ?? 0),
             physicalDefense: calculatePhysicalDefense(this.level, stats),
             magicDefense: calculateMagicDefense(this.level, stats)
         }
@@ -104,8 +104,7 @@ export class PlayerCharacter implements Character {
     }
 
     takeHitDamage(damage: number): number {
-        const physicalDefense = calculatePhysicalDefense(this.level, this.stats);
-        const absorbedDamage = Math.max(0, damage - physicalDefense)
+        const absorbedDamage = Math.max(0, damage - (this.stats.physicalDefense ?? 0))
         this.currentHp -= absorbedDamage
         return absorbedDamage
     }

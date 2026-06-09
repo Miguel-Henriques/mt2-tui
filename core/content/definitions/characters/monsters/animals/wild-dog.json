@@ -1,0 +1,16 @@
+{
+	"defId": "characters/monsters/animals/wild-dog",
+	"name": "Wild Dog",
+	"stats": {
+		"healthPoints": 126,
+		"physicalDefense": 4,
+		"strength": 3,
+		"intellect": 2,
+		"vitality": 5,
+		"dexterity": 6
+	},
+	"gold": 10,
+	"goldSpread": 20,
+	"experience": 15,
+	"level": 1
+}

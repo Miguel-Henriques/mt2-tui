@@ -3,7 +3,8 @@ import { getCoreServices } from "../index.js";
 import { MonsterDef } from "./definitions/character-definitions.js";
 import { AttackResult, Character } from "./index.js";
 import { calculateHitDamage, Stats } from "./stats/index.js";
-import { calculatePhysicalDefense } from "./stats/secondary-stats.js";
+import { calculatePhysicalDefense, SecondaryStats } from "./stats/secondary-stats.js";
+import { calculatePrimaryPhysicalDamage } from './stats/primary-stats.js';
 
 export class Monster implements Character {
 
@@ -20,8 +21,24 @@ export class Monster implements Character {
         this.name = definition.name
         this.level = definition.level
         this.experience = definition.experience
-        this.stats = definition.stats
+        this.stats = this.deriveEffectiveStats(definition)
         this.currentHp = this.stats.healthPoints ?? 0
+    }
+
+    /**
+     * Derived from mob.proto files
+     */
+    private deriveEffectiveStats(definition: MonsterDef): Stats {
+
+        const stats: Stats = {
+            healthPoints: definition.stats.healthPoints,
+            physicalDamage: calculatePrimaryPhysicalDamage(definition.level, definition.stats, 'Monster'),
+            damageSpread: 0,
+            physicalDefense: calculatePhysicalDefense(definition.level, definition.stats),
+            magicDefense: calculatePhysicalDefense(definition.level, definition.stats)
+        }
+
+        return stats
     }
 
     private static resolveDefinition(definitionId: string): MonsterDef {
@@ -48,8 +65,7 @@ export class Monster implements Character {
     }
 
     takeHitDamage(damage: number): number {
-        const physicalDefense = calculatePhysicalDefense(this.level, this.stats);
-        const absorbedDamage = Math.max(0, damage - physicalDefense)
+        const absorbedDamage = Math.max(0, damage - (this.stats.physicalDefense ?? 0))
         this.currentHp -= absorbedDamage
         return absorbedDamage
     }

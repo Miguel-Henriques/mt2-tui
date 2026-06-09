@@ -31,15 +31,6 @@ export interface SecondaryStats {
     magicDefense?: number
 }
 
-
-export function calculatePhysicalDamage(level: number, stats: Stats): number {
-    return level + (stats.strength ?? 0) + ((stats.intellect ?? 0) * 0.5) + ((stats.dexterity ?? 0) * 0.5) + (stats.physicalDamage ?? 0);
-}
-
-export function calculateMagicDamage(level: number, stats: Stats): number {
-    return level + ((stats.intellect ?? 0) * 2) + (stats.magicDamage ?? 0);
-}
-
 export function calculatePhysicalDefense(level: number, stats: Stats) {
     return level + (stats.vitality ?? 0) + (stats.physicalDefense ?? 0);
 }

@@ -74,6 +74,11 @@ sm - 16x16 for swords, 16x8 for daggers, 16x24 for two-handed swords
 md - 24x24
 lg - 32x32
 
+Characters though use unique sizes:
+
+classes: sm (width: 16), md (width: 24)
+monsters: sm (width: 32)
+
 Run the converter from the `core` package:
 
 ```bash

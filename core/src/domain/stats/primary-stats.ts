@@ -1,3 +1,5 @@
+import { CharacterClassType } from "../definitions/character-definitions.js"
+
 export interface PrimaryStats {
     /**
      * Commonly abbreviated as VIT.
@@ -41,3 +43,31 @@ export interface PrimaryStats {
     dexterity?: number
 }
 
+export function calculatePrimaryMagicDamage(level: number, stats: PrimaryStats): number {
+    return level * 2 + ((stats.intellect ?? 0) * 2)
+}
+
+/**
+ * This damage does not represent the final hit damage.
+ * On top of this you need to combine:
+ *  - attack bonuses from items and skills
+ *  - weapon damage roll
+ *  - target defense and resistances 
+ */
+export function calculatePrimaryPhysicalDamage(level: number, stats: PrimaryStats, classType: CharacterClassType | 'Monster'): number {
+
+    const classStatAttack = (stats: PrimaryStats, classType: CharacterClassType | 'Monster') => {
+        switch (classType) {
+            case "Warrior":
+            case "Sura":
+            case "Monster":
+                return 2 * (stats.strength ?? 0)
+            case "Ninja":
+                return (4 * (stats.strength ?? 0) + 2 * (stats.dexterity ?? 0)) / 3
+            case "Shaman":
+                return (4 * (stats.strength ?? 0) + 2 * (stats.intellect ?? 0)) / 3
+        }
+    }
+
+    return level * 2 + classStatAttack(stats, classType);
+}

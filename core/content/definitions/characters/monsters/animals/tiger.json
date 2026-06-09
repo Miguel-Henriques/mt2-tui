@@ -1,0 +1,14 @@
+{
+	"defId": "characters/monsters/animals/tiger",
+	"name": "Tiger",
+	"stats": {
+		"healthPoints": 585,
+		"physicalDefense": 22,
+		"strength": 18,
+		"intellect": 7,
+		"vitality": 27,
+		"dexterity": 20
+	},
+	"experience": 365,
+	"level": 18
+}

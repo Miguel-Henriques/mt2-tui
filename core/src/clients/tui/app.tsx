@@ -14,7 +14,8 @@ import { ASSETS_ROOT } from '../../storage/content-paths.js'
 import { supportsEmoji } from './supports-emoji.js'
 
 type Screen = 'menu' | 'form' | 'list' | 'game' | 'message' | 'combat-setup' | 'combat'
-type BackTarget = 'menu' | 'catalog' | 'game'
+type BackTarget = 'menu' | 'catalog' | 'game' | 'mobs'
+type MonsterSubtypeId = 'animals' | 'metins' | 'bosses' | 'orcs' | 'demons'
 
 interface SelectableItem {
 	label: string
@@ -79,6 +80,32 @@ const minimumSelectionRows = 5
 const minimumCombatLogRows = 3
 const selectionRowsReservedForChrome = 18
 const combatRowsReservedForChrome = 22
+
+const monsterSubtypes: {
+	id: MonsterSubtypeId
+	label: string
+}[] = [
+	{
+		id: 'animals',
+		label: 'Animals',
+	},
+	{
+		id: 'metins',
+		label: 'Metins',
+	},
+	{
+		id: 'bosses',
+		label: 'Bosses',
+	},
+	{
+		id: 'orcs',
+		label: 'Orcs',
+	},
+	{
+		id: 'demons',
+		label: 'Demons',
+	},
+]
 
 const titleLines = [
 	'    __  ____________      ________  ______',
@@ -397,6 +424,20 @@ const formatStats = (stats: Stats): string => {
 
 const definitionName = (defId: string): string => defId.split('/').pop() ?? defId
 
+const monsterSubtypeLabel = (subtypeId: MonsterSubtypeId): string =>
+	monsterSubtypes.find((subtype) => subtype.id === subtypeId)?.label ?? subtypeId
+
+const monsterSubtypePrefix = (subtypeId: MonsterSubtypeId): string =>
+	`characters/monsters/${subtypeId}/`
+
+const filterMonsterDefinitionsBySubtype = (
+	definitions: MonsterDef[],
+	subtypeId: MonsterSubtypeId,
+): MonsterDef[] =>
+	definitions.filter((definition) =>
+		definition.defId.startsWith(monsterSubtypePrefix(subtypeId)),
+	)
+
 const getStatEntries = (stats: Stats, keys: readonly (keyof Stats)[]): [keyof Stats, number][] =>
 	keys.reduce<[keyof Stats, number][]>((entries, key) => {
 		const value = stats[key]
@@ -694,6 +735,8 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 	const [fieldInput, setFieldInput] = useState('')
 	const [message, setMessage] = useState<MessageState | null>(null)
 	const [activeCharacter, setActiveCharacter] = useState<PlayerCharacter | null>(null)
+	const [combatMonsterSubtype, setCombatMonsterSubtype] =
+		useState<MonsterSubtypeId | null>(null)
 	const [combatMonsterCounts, setCombatMonsterCounts] = useState<Record<string, number>>({})
 	const [combat, setCombat] = useState<CombatPaneState | null>(null)
 	const [combatLogScrollOffset, setCombatLogScrollOffset] = useState(0)
@@ -727,9 +770,15 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 		setForm(null)
 		setMessage(null)
 		setCombat(null)
+		setCombatMonsterSubtype(null)
 		setCombatMonsterCounts({})
 		setCombatLogScrollOffset(0)
 		combatLogFollowBottomRef.current = true
+		resetSelection()
+	}
+
+	const openCombatMonsterSubtype = (subtypeId: MonsterSubtypeId) => {
+		setCombatMonsterSubtype(subtypeId)
 		resetSelection()
 	}
 
@@ -763,6 +812,11 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 	const openBackTarget = (backTarget: BackTarget) => {
 		if (backTarget === 'catalog') {
 			openCatalogMenu()
+			return
+		}
+
+		if (backTarget === 'mobs') {
+			openMonsterCatalog()
 			return
 		}
 
@@ -892,17 +946,58 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 	}
 
 	const openMonsterCatalog = () => {
+		const definitions = services.definitions.listMonsterDefinitions()
+
 		openList({
 			title: 'Mobs',
-			description: 'Monster definitions.',
+			description: 'Browse monster definitions by subtype.',
 			backTarget: 'catalog',
-			items: services.definitions.listMonsterDefinitions().map((definition) => ({
-				label: definition.name ?? definitionName(definition.defId),
-				detail: formatMonsterDefinitionDetails(definition),
-				hint: definition.defId,
-				iconLines: readCatalogIconLines(definition.defId),
-				action: () => {},
-			})),
+			items: monsterSubtypes.map((subtype) => {
+				const count = filterMonsterDefinitionsBySubtype(
+					definitions,
+					subtype.id,
+				).length
+
+				return {
+					label: subtype.label,
+					detail: `Browse ${subtype.label.toLowerCase()} monster definitions.`,
+					hint: `${count} monster${count === 1 ? '' : 's'}`,
+					statusLabel: `${count}`,
+					action: () => openMonsterSubtypeCatalog(subtype.id),
+				}
+			}),
+		})
+	}
+
+	const openMonsterSubtypeCatalog = (subtypeId: MonsterSubtypeId) => {
+		const label = monsterSubtypeLabel(subtypeId)
+		const definitions = filterMonsterDefinitionsBySubtype(
+			services.definitions.listMonsterDefinitions(),
+			subtypeId,
+		)
+		const items =
+			definitions.length === 0
+				? [
+						{
+							label: `No ${label.toLowerCase()} mobs`,
+							detail: `Add monster definitions under ${monsterSubtypePrefix(subtypeId)}.`,
+							disabled: true,
+							action: () => {},
+						},
+					]
+				: definitions.map((definition) => ({
+						label: definition.name ?? definitionName(definition.defId),
+						detail: formatMonsterDefinitionDetails(definition),
+						hint: definition.defId,
+						iconLines: readCatalogIconLines(definition.defId),
+						action: () => {},
+					}))
+
+		openList({
+			title: `Mobs > ${label}`,
+			description: `${label} monster definitions.`,
+			backTarget: 'mobs',
+			items,
 		})
 	}
 
@@ -945,6 +1040,15 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 	}
 
 	const combatEnemyIds = (): string[] => Object.entries(combatMonsterCounts).flatMap(([defId, count]) => Array.from({ length: count }, () => defId))
+
+	const combatMonsterSelectionCountForSubtype = (
+		definitions: MonsterDef[],
+		subtypeId: MonsterSubtypeId,
+	): number =>
+		filterMonsterDefinitionsBySubtype(definitions, subtypeId).reduce(
+			(count, definition) => count + (combatMonsterCounts[definition.defId] ?? 0),
+			0,
+		)
 
 	const handleCombatUpdate = (update: PVMCombatSimulationUpdate) => {
 		setCombat((previousCombat) => ({
@@ -989,7 +1093,46 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 
 	const combatSetupItems = (): SelectableItem[] => {
 		const enemies = combatEnemyIds()
-		const monsterItems = services.definitions.listMonsterDefinitions().map((definition) => {
+		const definitions = services.definitions.listMonsterDefinitions()
+
+		if (combatMonsterSubtype === null) {
+			const subtypeItems = monsterSubtypes.map((subtype) => {
+				const definitionCount = filterMonsterDefinitionsBySubtype(
+					definitions,
+					subtype.id,
+				).length
+				const selectedCount = combatMonsterSelectionCountForSubtype(
+					definitions,
+					subtype.id,
+				)
+
+				return {
+					label: subtype.label,
+					detail: `Choose ${subtype.label.toLowerCase()} monsters for PvM combat.`,
+					hint: `${definitionCount} monster${definitionCount === 1 ? '' : 's'}`,
+					statusLabel:
+						selectedCount > 0 ? `${selectedCount} selected` : `${definitionCount}`,
+					action: () => openCombatMonsterSubtype(subtype.id),
+				}
+			})
+
+			return [
+				...subtypeItems,
+				{
+					label: 'Start Combat',
+					detail: 'Initiate combat with the selected monster pack.',
+					disabled: enemies.length === 0,
+					statusLabel: `${enemies.length} monster${enemies.length === 1 ? '' : 's'}`,
+					action: startPVMCombat,
+				},
+			]
+		}
+
+		const monsterDefinitions = filterMonsterDefinitionsBySubtype(
+			definitions,
+			combatMonsterSubtype,
+		)
+		const monsterItems = monsterDefinitions.map((definition) => {
 			const count = combatMonsterCounts[definition.defId] ?? 0
 
 			return {
@@ -1002,8 +1145,29 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 				decrement: () => decrementCombatMonsterCount(definition.defId),
 			}
 		})
+		const emptySubtypeItems: SelectableItem[] =
+			monsterItems.length === 0
+				? [
+						{
+							label: `No ${monsterSubtypeLabel(combatMonsterSubtype).toLowerCase()} mobs`,
+							detail: `Add monster definitions under ${monsterSubtypePrefix(combatMonsterSubtype)}.`,
+							disabled: true,
+							action: () => {},
+						},
+					]
+				: []
 
 		return [
+			{
+				label: 'Change subtype',
+				detail: 'Return to the mob subtype menu without clearing selected monsters.',
+				statusLabel: `${enemies.length} mob${enemies.length === 1 ? '' : 's'}`,
+				action: () => {
+					setCombatMonsterSubtype(null)
+					resetSelection()
+				},
+			},
+			...emptySubtypeItems,
 			...monsterItems,
 			{
 				label: 'Start Combat',
@@ -1087,7 +1251,7 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 
 		const normalized = search.toLowerCase()
 		return source.filter((item) => `${item.label} ${item.detail} ${item.hint ?? ''}`.toLowerCase().includes(normalized))
-	}, [screen, list, search, combatMonsterCounts])
+	}, [screen, list, search, combatMonsterCounts, combatMonsterSubtype])
 
 	const selectedItem = currentItems[selectedIndex]
 	const showCompactDetails = columns < 90
@@ -1132,6 +1296,12 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 
 		if (screen === 'message' && message !== null) {
 			openBackTarget(message.backTarget)
+			return
+		}
+
+		if (screen === 'combat-setup' && combatMonsterSubtype !== null) {
+			setCombatMonsterSubtype(null)
+			resetSelection()
 			return
 		}
 
@@ -1314,7 +1484,9 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			: screen === 'game'
 				? 'Game'
 				: screen === 'combat-setup'
-					? 'Combat (PvM)'
+					? combatMonsterSubtype === null
+						? 'Combat (PvM)'
+						: `Combat (PvM) > ${monsterSubtypeLabel(combatMonsterSubtype)}`
 					: screen === 'combat'
 						? 'Combat'
 						: (list?.title ?? form?.title ?? 'Result')

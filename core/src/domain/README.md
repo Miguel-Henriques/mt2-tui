@@ -54,3 +54,7 @@ Vitality: no multipliers
 Intellect:
 Strength: 1x for all classes
 Agility:
+
+## References
+
+Mobs DB: https://metin2alerts.com/moblist

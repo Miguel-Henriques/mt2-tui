@@ -1,10 +1,11 @@
 import { ExtraStats } from "./extra-stats.js";
 import { PrimaryStats } from "./primary-stats.js";
-import { calculatePhysicalDamage, calculatePhysicalDefense, SecondaryStats } from "./secondary-stats.js";
+import { SecondaryStats } from "./secondary-stats.js";
 import { SpeedStats } from "./speed-stats.js";
 
 /**
  * TODO: Resistances (Element System) - https://fr-wiki.metin2.gameforge.com/index.php/Syst%C3%A8me_d%27%C3%A9l%C3%A9ments
+ * TODO: HP/MP Regeneration 
  */
 export type Stats = PrimaryStats & SecondaryStats & ExtraStats & SpeedStats;
 
@@ -24,12 +25,12 @@ export type Stats = PrimaryStats & SecondaryStats & ExtraStats & SpeedStats;
  */
 
 /**
+ * Takes the total character's physical damage and applies variance from extra stats.
  * 
  * Original formula: https://pt-wiki.metin2.gameforge.com/index.php/Dano
  */
 export function calculateHitDamage(initiator: { level: number, stats: Stats }): number {
-    let initiatorPhysicalDamage = calculatePhysicalDamage(initiator.level, initiator.stats);
-
+    let initiatorPhysicalDamage = initiator.stats.physicalDamage ?? 0
 
     if (initiator.stats.averageDamage) {
         initiatorPhysicalDamage *= 1 + initiator.stats.averageDamage / 100
@@ -41,11 +42,11 @@ export function calculateHitDamage(initiator: { level: number, stats: Stats }): 
 
     //TODO: crit
     //TODO: piercing
+    //TODO: poison
+    //TODO: stun
 
     return damageRoll
 }
-
-
 
 //TODO: Skill damage
 

@@ -15,6 +15,11 @@ export interface ExtraStats {
      */
     piercingHitChance?: number
 
+    slowingChance?: number
+
+    stunChance?: number
+
+    poisonChance?: number
 
     damageReduction?: number
 
