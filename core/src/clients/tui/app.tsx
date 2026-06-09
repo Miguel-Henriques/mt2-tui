@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { Box, Text, useApp, useInput, useWindowSize } from 'ink'
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { CoreServices } from '../../index.js'
 import type { CharacterClassDef, CharacterClassType, MonsterDef } from '../../domain/definitions/character-definitions.js'
@@ -76,7 +76,9 @@ interface TuiAppProps {
 
 const characterClassTypes: CharacterClassType[] = ['Ninja', 'Shaman', 'Sura', 'Warrior']
 const minimumSelectionRows = 5
+const minimumCombatLogRows = 3
 const selectionRowsReservedForChrome = 18
+const combatRowsReservedForChrome = 22
 
 const titleLines = [
 	'    __  ____________      ________  ______',
@@ -185,10 +187,20 @@ const FooterHelp = ({ screen }: { screen: Screen }) => {
 				{' '}
 				<Text color="yellow">Enter</Text> next/submit
 			</>
-		) : (
+		) : screen === 'combat' ? null : (
 			<>
 				{' '}
 				<Text color="yellow">Enter</Text> select
+			</>
+		)
+	const moveHelp =
+		screen === 'combat' ? (
+			<>
+				<Text color="yellow">↑/↓</Text> scroll log
+			</>
+		) : (
+			<>
+				<Text color="yellow">↑/↓</Text> move
 			</>
 		)
 	const backHelp = screen === 'menu' ? null : <> b back</>
@@ -196,7 +208,7 @@ const FooterHelp = ({ screen }: { screen: Screen }) => {
 	return (
 		<Box borderStyle="single" borderColor="gray" paddingX={1}>
 			<Text color="gray">
-				<Text color="yellow">↑/↓</Text> move
+				{moveHelp}
 				{formHelp}
 				{backHelp}
 				{searchHelp} <Text color="yellow">q</Text> quit
@@ -489,44 +501,101 @@ const GameActionsPanel = ({
 	</Box>
 )
 
-const CombatPane = ({ combat }: { combat: CombatPaneState }) => {
-	const visibleMessages = combat.messages.slice(-10)
+interface FightLogListProps {
+	messages: string[]
+	scrollOffset: number
+	visibleRows: number
+}
+
+const getFightLogScrollBounds = (messagesLength: number, visibleRows: number, scrollOffset: number) => {
+	const safeVisibleRows = Math.max(1, visibleRows)
+	const preliminaryMaxOffset = Math.max(0, messagesLength - safeVisibleRows)
+	const preliminaryOffset = Math.min(Math.max(0, scrollOffset), preliminaryMaxOffset)
+	const hasMoreBelow = preliminaryOffset + safeVisibleRows < messagesLength
+	const indicatorRows = (preliminaryOffset > 0 ? 1 : 0) + (hasMoreBelow ? 1 : 0)
+	const messageRows = Math.max(1, safeVisibleRows - indicatorRows)
+	const maxScrollOffset = Math.max(0, messagesLength - messageRows)
+	const safeScrollOffset = Math.min(Math.max(0, scrollOffset), maxScrollOffset)
+
+	return {
+		hasMoreAbove: safeScrollOffset > 0,
+		hasMoreBelow: safeScrollOffset + messageRows < messagesLength,
+		maxScrollOffset,
+		messageRows,
+		safeScrollOffset,
+	}
+}
+
+const FightLogList = ({ messages, scrollOffset, visibleRows }: FightLogListProps) => {
+	const { hasMoreAbove, hasMoreBelow, messageRows, safeScrollOffset } = getFightLogScrollBounds(messages.length, visibleRows, scrollOffset)
+	const visibleMessages = messages.slice(safeScrollOffset, safeScrollOffset + messageRows)
 
 	return (
 		<Box flexDirection="column">
-			<Text color="magenta" bold>
-				Player
-			</Text>
-			<Text color="gray">
-				{combat.player.name} HP {combat.player.currentHp}/{combat.player.maxHp} Attack {combat.player.attack} Defense {combat.player.defense}
-			</Text>
-			<Box flexDirection="column" marginTop={1}>
-				<Text color="magenta" bold>
-					Alive monsters
-				</Text>
-				{combat.enemies.length === 0 ? (
-					<Text color="gray">No monsters alive.</Text>
-				) : (
-					combat.enemies.map((enemy) => (
-						<Text key={enemy.id} color="gray">
-							{enemy.name} HP {enemy.currentHp}/{enemy.maxHp}
-						</Text>
-					))
-				)}
-			</Box>
-			<Box flexDirection="column" marginTop={1}>
-				<Text color="magenta" bold>
-					Fight log <Text color="gray">({combat.status})</Text>
-				</Text>
-				{visibleMessages.map((message, index) => (
-					<Text key={`${message}-${index}`} color="gray">
+			{hasMoreAbove && <Text color="gray">(earlier)</Text>}
+			{visibleMessages.length === 0 ? (
+				<Text color="gray">Waiting for combat events...</Text>
+			) : (
+				visibleMessages.map((message, index) => (
+					<Text key={`${safeScrollOffset + index}-${message}`} color="gray">
 						{message}
 					</Text>
-				))}
-			</Box>
+				))
+			)}
+			{hasMoreBelow && <Text color="gray">(more)</Text>}
 		</Box>
 	)
 }
+
+interface CombatPaneProps {
+	combat: CombatPaneState
+	scrollOffset: number
+	showCompactDetails: boolean
+	visibleLogRows: number
+}
+
+const CombatStatusPane = ({ combat }: { combat: CombatPaneState }) => (
+	<Box borderStyle="single" borderColor="gray" flexDirection="column" flexGrow={1} minWidth={28} paddingX={1} paddingY={1}>
+		<Text color="magenta" bold>
+			Player
+		</Text>
+		<Text color="gray">
+			{combat.player.name} HP {combat.player.currentHp}/{combat.player.maxHp} Attack {combat.player.attack} Defense {combat.player.defense}
+		</Text>
+		<Box flexDirection="column" marginTop={1}>
+			<Text color="magenta" bold>
+				Alive monsters
+			</Text>
+			{combat.enemies.length === 0 ? (
+				<Text color="gray">No monsters alive.</Text>
+			) : (
+				combat.enemies.map((enemy) => (
+					<Text key={enemy.id} color="gray">
+						{enemy.name} HP {enemy.currentHp}/{enemy.maxHp}
+					</Text>
+				))
+			)}
+		</Box>
+	</Box>
+)
+
+const CombatFightLogPane = ({ combat, scrollOffset, visibleLogRows }: Pick<CombatPaneProps, 'combat' | 'scrollOffset' | 'visibleLogRows'>) => (
+	<Box borderStyle="single" borderColor="gray" flexDirection="column" flexGrow={1} paddingX={1} paddingY={1}>
+		<Text color="magenta" bold>
+			Fight log <Text color="gray">({combat.status})</Text>
+		</Text>
+		<FightLogList messages={combat.messages} scrollOffset={scrollOffset} visibleRows={visibleLogRows} />
+	</Box>
+)
+
+const CombatPane = ({ combat, scrollOffset, showCompactDetails, visibleLogRows }: CombatPaneProps) => (
+	<Box flexDirection={showCompactDetails ? 'column' : 'row'}>
+		<CombatStatusPane combat={combat} />
+		<Box flexGrow={1} marginLeft={showCompactDetails ? 0 : 2} marginTop={showCompactDetails ? 1 : 0}>
+			<CombatFightLogPane combat={combat} scrollOffset={scrollOffset} visibleLogRows={visibleLogRows} />
+		</Box>
+	</Box>
+)
 
 const parseCharacterClassType = (value: string): CharacterClassType => {
 	const normalized = value.trim().toLowerCase()
@@ -627,6 +696,8 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 	const [activeCharacter, setActiveCharacter] = useState<PlayerCharacter | null>(null)
 	const [combatMonsterCounts, setCombatMonsterCounts] = useState<Record<string, number>>({})
 	const [combat, setCombat] = useState<CombatPaneState | null>(null)
+	const [combatLogScrollOffset, setCombatLogScrollOffset] = useState(0)
+	const combatLogFollowBottomRef = useRef(true)
 
 	const resetSelection = () => {
 		setSelectedIndex(0)
@@ -657,6 +728,8 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 		setMessage(null)
 		setCombat(null)
 		setCombatMonsterCounts({})
+		setCombatLogScrollOffset(0)
+		combatLogFollowBottomRef.current = true
 		resetSelection()
 	}
 
@@ -899,6 +972,8 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 		setList(null)
 		setForm(null)
 		setMessage(null)
+		setCombatLogScrollOffset(0)
+		combatLogFollowBottomRef.current = true
 		resetSelection()
 
 		void services.simulations
@@ -1015,6 +1090,30 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 	}, [screen, list, search, combatMonsterCounts])
 
 	const selectedItem = currentItems[selectedIndex]
+	const showCompactDetails = columns < 90
+
+	const visibleCombatLogRows = useMemo(() => {
+		const enemyRows = Math.max(1, combat?.enemies.length ?? 0)
+		const statusPaneRows = 6 + enemyRows
+		const rowsBeforeLog = showCompactDetails ? statusPaneRows + 2 : 1
+
+		return Math.max(minimumCombatLogRows, rows - combatRowsReservedForChrome - rowsBeforeLog)
+	}, [rows, combat?.enemies.length, showCompactDetails])
+
+	const maxCombatLogScrollOffset =
+		combat === null ? 0 : getFightLogScrollBounds(combat.messages.length, visibleCombatLogRows, combatLogScrollOffset).maxScrollOffset
+
+	useEffect(() => {
+		setCombatLogScrollOffset((offset) => Math.min(offset, maxCombatLogScrollOffset))
+	}, [maxCombatLogScrollOffset])
+
+	useEffect(() => {
+		if (!combatLogFollowBottomRef.current || combat === null || screen !== 'combat') {
+			return
+		}
+
+		setCombatLogScrollOffset(maxCombatLogScrollOffset)
+	}, [combat?.messages.length, maxCombatLogScrollOffset, screen])
 
 	const goBack = () => {
 		if (screen === 'menu') {
@@ -1168,6 +1267,26 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			return
 		}
 
+		if (screen === 'combat' && combat !== null) {
+			if (key.upArrow) {
+				setCombatLogScrollOffset((offset) => {
+					const nextOffset = Math.max(0, offset - 1)
+					combatLogFollowBottomRef.current = false
+					return nextOffset
+				})
+				return
+			}
+
+			if (key.downArrow) {
+				setCombatLogScrollOffset((offset) => {
+					const nextOffset = Math.min(maxCombatLogScrollOffset, offset + 1)
+					combatLogFollowBottomRef.current = nextOffset >= maxCombatLogScrollOffset
+					return nextOffset
+				})
+				return
+			}
+		}
+
 		if (key.upArrow) {
 			setSelectedIndex((index) => Math.max(0, index - 1))
 			return
@@ -1188,7 +1307,6 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 		}
 	})
 
-	const showCompactDetails = columns < 90
 	const visibleSelectionRows = Math.max(minimumSelectionRows, rows - selectionRowsReservedForChrome)
 	const title =
 		screen === 'menu'
@@ -1238,7 +1356,12 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 					combat === null ? (
 						<Text color="gray">Starting combat...</Text>
 					) : (
-						<CombatPane combat={combat} />
+						<CombatPane
+							combat={combat}
+							scrollOffset={combatLogScrollOffset}
+							showCompactDetails={showCompactDetails}
+							visibleLogRows={visibleCombatLogRows}
+						/>
 					)
 				) : screen === 'game' && activeCharacter !== null ? (
 					<Box flexDirection={showCompactDetails ? 'column' : 'row'}>

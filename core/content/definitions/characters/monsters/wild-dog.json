@@ -1,5 +1,6 @@
 {
 	"defId": "characters/monsters/wild-dog",
+	"name": "Wild Dog",
 	"stats": {
 		"healthPoints": 130,
 		"movementSpeed": 100,
