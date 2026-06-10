@@ -28,3 +28,21 @@ export interface MonsterDef extends CharacterDef {
     goldSpread: number
     experience: number
 }
+
+export interface MobGroupDef {
+    defId: string
+    name: string
+    mobs: Record<string, number>
+}
+
+export interface SpotMobEntry {
+    defId: string
+    count: number
+    respawnTimeMs: number
+}
+
+export interface SpotDef {
+    defId: string
+    name: string
+    mobs: SpotMobEntry[]
+}

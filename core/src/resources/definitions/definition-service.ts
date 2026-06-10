@@ -1,7 +1,16 @@
-import { CharacterClassDef, MonsterDef } from '../../domain/definitions/character-definitions.js'
+import {
+	CharacterClassDef,
+	MobGroupDef,
+	MonsterDef,
+	SpotDef,
+} from '../../domain/definitions/character-definitions.js'
 import { ItemDef } from '../../domain/definitions/item-definitions.js'
 import { NotFoundError } from '../../shared/errors.js'
 import type { DefinitionRepository } from '../../storage/definitions/definition-repository.js'
+import {
+	resolveMobGroupEnemyDefIds,
+	resolveSpotEnemyDefIds,
+} from './resolve-spot-enemies.js'
 import type { DefinitionSummary } from './definition-types.js'
 
 export interface DefinitionService {
@@ -12,6 +21,12 @@ export interface DefinitionService {
 	getMonsterDefinition(defId: string): MonsterDef
 	listCharacterClassDefinitions(): CharacterClassDef[]
 	getCharacterClassDefinition(defId: string): CharacterClassDef
+	listMobGroupDefinitions(): MobGroupDef[]
+	getMobGroupDefinition(defId: string): MobGroupDef
+	listSpotDefinitions(): SpotDef[]
+	getSpotDefinition(defId: string): SpotDef
+	resolveSpotEnemyDefIds(spotDefId: string): string[]
+	resolveMobGroupEnemyDefIds(mobGroupDefId: string): string[]
 }
 
 const definitionName = (defId: string): string =>
@@ -66,5 +81,46 @@ export const createDefinitionService = (
 		}
 
 		return definition
+	},
+	listMobGroupDefinitions: () => repository.listMobGroupDefinitions(),
+	getMobGroupDefinition: (defId) => {
+		const definition = repository.getMobGroupDefinition(defId)
+
+		if (definition === undefined) {
+			throw new NotFoundError()
+		}
+
+		return definition
+	},
+	listSpotDefinitions: () => repository.listSpotDefinitions(),
+	getSpotDefinition: (defId) => {
+		const definition = repository.getSpotDefinition(defId)
+
+		if (definition === undefined) {
+			throw new NotFoundError()
+		}
+
+		return definition
+	},
+	resolveSpotEnemyDefIds: (spotDefId) => {
+		const spot = repository.getSpotDefinition(spotDefId)
+
+		if (spot === undefined) {
+			throw new NotFoundError()
+		}
+
+		return resolveSpotEnemyDefIds(
+			spot,
+			(defId) => repository.getMobGroupDefinition(defId),
+		)
+	},
+	resolveMobGroupEnemyDefIds: (mobGroupDefId) => {
+		const mobGroup = repository.getMobGroupDefinition(mobGroupDefId)
+
+		if (mobGroup === undefined) {
+			throw new NotFoundError()
+		}
+
+		return resolveMobGroupEnemyDefIds(mobGroup)
 	},
 })

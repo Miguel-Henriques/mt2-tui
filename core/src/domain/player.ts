@@ -108,6 +108,10 @@ export class PlayerCharacter implements Character {
         this.currentHp -= absorbedDamage
         return absorbedDamage
     }
+
+    respawn(): void {
+        this.currentHp = this.stats.healthPoints ?? 0
+    }
 }
 
 /**

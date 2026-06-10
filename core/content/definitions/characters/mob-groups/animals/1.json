@@ -1,0 +1,8 @@
+{
+    "defId": "characters/mob-groups/animals/1",
+    "name": "Animals 1",
+    "mobs": {
+        "animals/wild-dog": 2,
+        "animals/hungry-stray-dog": 1
+    }
+}

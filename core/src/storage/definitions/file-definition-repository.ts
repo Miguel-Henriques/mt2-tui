@@ -2,7 +2,9 @@ import { relative } from 'node:path'
 
 import type {
 	CharacterClassDef,
+	MobGroupDef,
 	MonsterDef,
+	SpotDef,
 } from '../../domain/definitions/character-definitions.js'
 import type { EquipmentItemDef } from '../../domain/definitions/item-definitions.js'
 import { DEFINITIONS_ROOT } from '../content-paths.js'
@@ -20,6 +22,8 @@ export class FileDefinitionRepository implements DefinitionRepository {
 		string,
 		CharacterClassDef
 	>()
+	private readonly mobGroupDefinitions = new Map<string, MobGroupDef>()
+	private readonly spotDefinitions = new Map<string, SpotDef>()
 
 	constructor() {
 		this.loadDefinitions()
@@ -51,6 +55,22 @@ export class FileDefinitionRepository implements DefinitionRepository {
 		return this.characterClassDefinitions.get(defId)
 	}
 
+	listMobGroupDefinitions(): MobGroupDef[] {
+		return [...this.mobGroupDefinitions.values()]
+	}
+
+	getMobGroupDefinition(defId: string): MobGroupDef | undefined {
+		return this.mobGroupDefinitions.get(defId)
+	}
+
+	listSpotDefinitions(): SpotDef[] {
+		return [...this.spotDefinitions.values()]
+	}
+
+	getSpotDefinition(defId: string): SpotDef | undefined {
+		return this.spotDefinitions.get(defId)
+	}
+
 	private loadDefinitions(): void {
 		for (const path of walkJsonFiles(DEFINITIONS_ROOT)) {
 			const rel = relativePath(path)
@@ -73,6 +93,18 @@ export class FileDefinitionRepository implements DefinitionRepository {
 					definition.defId,
 					definition,
 				)
+				continue
+			}
+
+			if (rel.startsWith('characters/mob-groups/')) {
+				const definition = readJsonFile<MobGroupDef>(path)
+				this.mobGroupDefinitions.set(definition.defId, definition)
+				continue
+			}
+
+			if (rel.startsWith('spots/')) {
+				const definition = readJsonFile<SpotDef>(path)
+				this.spotDefinitions.set(definition.defId, definition)
 			}
 		}
 	}

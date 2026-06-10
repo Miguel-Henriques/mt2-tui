@@ -50,6 +50,7 @@ export const createSimulationService = (
 		if (input.player instanceof PlayerCharacter) {
 
 			const player = input.player
+			player.respawn()
 			const events: SimulationEvent[] = seedPvMEvents(player, spawnedMobs)
 			const abortController = new AbortController()
 			let mobsAlive = [...spawnedMobs]

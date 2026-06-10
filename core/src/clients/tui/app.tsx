@@ -5,7 +5,13 @@ import { Box, Text, useApp, useInput, useWindowSize } from 'ink'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { CoreServices } from '../../index.js'
-import type { CharacterClassDef, CharacterClassType, MonsterDef } from '../../domain/definitions/character-definitions.js'
+import type {
+	CharacterClassDef,
+	CharacterClassType,
+	MobGroupDef,
+	MonsterDef,
+	SpotDef,
+} from '../../domain/definitions/character-definitions.js'
 import type { EquipmentItemDef, ItemDef } from '../../domain/definitions/item-definitions.js'
 import type { PlayerCharacter } from '../../domain/player.js'
 import type { Stats } from '../../domain/stats/index.js'
@@ -17,6 +23,8 @@ type Screen = 'menu' | 'form' | 'list' | 'game' | 'message' | 'combat-setup' | '
 type BackTarget = 'menu' | 'catalog' | 'equipment' | 'game' | 'mobs'
 type EquipmentCategoryId = 'weapons' | 'armour' | 'helmets' | 'shoes' | 'belts' | 'earrings' | 'necklaces' | 'gloves' | 'shields' | 'bracelets'
 type MonsterSubtypeId = 'animals' | 'metins' | 'bosses' | 'orcs' | 'demons'
+type CombatCustomSelection = MonsterSubtypeId | 'mob-groups' | null
+type CombatSetupMode = 'select' | 'levelling-areas' | 'custom'
 
 interface SelectableItem {
 	label: string
@@ -165,13 +173,34 @@ const equipmentCategories: {
 	},
 ]
 
-const titleLines = [
+const readAnsiFileLines = (path: string): string[] | null => {
+	if (!existsSync(path)) {
+		return null
+	}
+
+	const lines = readFileSync(path, 'utf8').replace(/\r\n/g, '\n').split('\n')
+	const lastLine = lines[lines.length - 1]
+
+	return lastLine === '' ? lines.slice(0, -1) : lines
+}
+
+const ansiLineVisibleWidth = (line: string): number => line.replace(/\x1b\[[0-9;]*m/g, '').length
+
+const ansiLinesVisibleWidth = (lines: string[]): number =>
+	lines.reduce((maxWidth, line) => Math.max(maxWidth, ansiLineVisibleWidth(line)), 0)
+
+const fallbackTitleLines = [
 	'    __  ____________      ________  ______',
 	'   /  |/  /_  __/__ \\    /_  __/ / / /  _/',
 	'  / /|_/ / / /  __/ /     / / / / / // /  ',
 	' / /  / / / /  / __/     / / / /_/ // /   ',
 	'/_/  /_/ /_/  /____/    /_/  \\____/___/   ',
 ]
+
+const titleLogoPath = join(ASSETS_ROOT, 'misc/logo.ansi')
+const titleLogoLines = readAnsiFileLines(titleLogoPath)
+const titleLines = titleLogoLines ?? fallbackTitleLines
+const titleUsesAnsi = titleLogoLines !== null
 
 const statLabels: Record<string, string> = {
 	averageDamage: 'Average Damage',
@@ -249,11 +278,15 @@ const extraStatKeys: readonly (keyof Stats)[] = [
 
 const TitleBanner = () => (
 	<Box flexDirection="column" marginBottom={1}>
-		{titleLines.map((line) => (
-			<Text key={line} color="cyan" bold>
-				{line}
-			</Text>
-		))}
+		{titleLines.map((line, index) =>
+			titleUsesAnsi ? (
+				<Text key={`title-${index}`}>{line}</Text>
+			) : (
+				<Text key={`title-${index}`} color="cyan" bold>
+					{line}
+				</Text>
+			),
+		)}
 		<Text color="gray">A terminal-based RPG inspired on Metin2</Text>
 	</Box>
 )
@@ -318,7 +351,7 @@ const SelectionList = ({ items, selectedIndex, search, visibleRows }: SelectionL
 	const visibleItems = items.slice(startIndex, endIndex)
 
 	return (
-		<Box flexDirection="column" minWidth={28}>
+		<Box flexDirection="column" flexShrink={0} minWidth={28}>
 			{search.length > 0 && (
 				<Text color="gray">
 					Filter: <Text color="yellow">{search}</Text>
@@ -350,8 +383,9 @@ const SelectionList = ({ items, selectedIndex, search, visibleRows }: SelectionL
 
 const SelectionDetails = ({ item }: { item?: SelectableItem }) => {
 	const lines = item?.detail.split('\n') ?? ['Choose an option to see what it does.']
+	const iconWidth = item?.iconLines === undefined ? 0 : ansiLinesVisibleWidth(item.iconLines)
 	const details = (
-		<Box flexDirection="column" flexGrow={1}>
+		<Box flexDirection="column" flexGrow={1} minWidth={0}>
 			<Text color="magenta" bold>
 				Details
 			</Text>
@@ -369,12 +403,12 @@ const SelectionDetails = ({ item }: { item?: SelectableItem }) => {
 	)
 
 	return (
-		<Box flexDirection="row" marginLeft={4} flexGrow={1}>
+		<Box flexDirection="row" flexGrow={1} marginLeft={4} minWidth={iconWidth > 0 ? iconWidth + 20 : 0}>
 			{item?.iconLines === undefined ? (
 				details
 			) : (
 				<>
-					<Box flexDirection="column" marginRight={4}>
+					<Box flexDirection="column" flexShrink={0} marginRight={4} width={iconWidth}>
 						{item.iconLines.map((line, index) => (
 							<Text key={`${line}-${index}`}>{line}</Text>
 						))}
@@ -382,6 +416,197 @@ const SelectionDetails = ({ item }: { item?: SelectableItem }) => {
 					{details}
 				</>
 			)}
+		</Box>
+	)
+}
+
+interface CombatSelectionCartLine {
+	label: string
+	quantity: number
+	monsterTotal: number
+}
+
+interface CombatSelectionCartSummary {
+	totalMonsters: number
+	mobGroupLines: CombatSelectionCartLine[]
+	monsterLines: CombatSelectionCartLine[]
+	compositionLines: CombatSelectionCartLine[]
+}
+
+const buildCombatSelectionCartSummary = (
+	monsterCounts: Record<string, number>,
+	mobGroupCounts: Record<string, number>,
+	getMonsterDefinition: (defId: string) => MonsterDef | undefined,
+	getMobGroupDefinition: (defId: string) => MobGroupDef | undefined,
+	resolveMobGroupEnemyDefIds: (defId: string) => string[],
+): CombatSelectionCartSummary => {
+	const mobGroupLines = Object.entries(mobGroupCounts)
+		.filter(([, count]) => count > 0)
+		.map(([defId, quantity]) => {
+			const mobGroup = getMobGroupDefinition(defId)
+			const monstersPerGroup = resolveMobGroupEnemyDefIds(defId).length
+
+			return {
+				label: mobGroup?.name ?? definitionName(defId),
+				quantity,
+				monsterTotal: monstersPerGroup * quantity,
+			}
+		})
+		.sort((left, right) => left.label.localeCompare(right.label))
+	const monsterLines = Object.entries(monsterCounts)
+		.filter(([, count]) => count > 0)
+		.map(([defId, quantity]) => {
+			const monster = getMonsterDefinition(defId)
+
+			return {
+				label: monster?.name ?? definitionName(defId),
+				quantity,
+				monsterTotal: quantity,
+			}
+		})
+		.sort((left, right) => left.label.localeCompare(right.label))
+	const compositionCounts = new Map<string, number>()
+
+	for (const [defId, quantity] of Object.entries(mobGroupCounts)) {
+		if (quantity <= 0) {
+			continue
+		}
+
+		for (const enemyDefId of resolveMobGroupEnemyDefIds(defId)) {
+			compositionCounts.set(enemyDefId, (compositionCounts.get(enemyDefId) ?? 0) + quantity)
+		}
+	}
+
+	for (const [defId, quantity] of Object.entries(monsterCounts)) {
+		if (quantity <= 0) {
+			continue
+		}
+
+		compositionCounts.set(defId, (compositionCounts.get(defId) ?? 0) + quantity)
+	}
+
+	const compositionLines = [...compositionCounts.entries()]
+		.map(([defId, quantity]) => {
+			const monster = getMonsterDefinition(defId)
+
+			return {
+				label: monster?.name ?? definitionName(defId),
+				quantity,
+				monsterTotal: quantity,
+			}
+		})
+		.sort((left, right) => left.label.localeCompare(right.label))
+	const totalMonsters = compositionLines.reduce((total, line) => total + line.quantity, 0)
+
+	return {
+		totalMonsters,
+		mobGroupLines,
+		monsterLines,
+		compositionLines,
+	}
+}
+
+const CombatSelectionCartSection = ({
+	title,
+	lines,
+}: {
+	title: string
+	lines: CombatSelectionCartLine[]
+}) => {
+	if (lines.length === 0) {
+		return null
+	}
+
+	return (
+		<Box flexDirection="column" marginTop={1}>
+			<Text color="gray">{title}</Text>
+			{lines.map((line) => (
+				<Text key={`${title}-${line.label}`} color="gray">
+					{line.label} x{line.quantity}
+					{line.monsterTotal !== line.quantity && (
+						<Text color="yellow"> · {line.monsterTotal} mobs</Text>
+					)}
+				</Text>
+			))}
+		</Box>
+	)
+}
+
+const CombatSelectionCart = ({
+	summary,
+	marginLeft = 2,
+}: {
+	summary: CombatSelectionCartSummary
+	marginLeft?: number
+}) => (
+	<Box
+		borderStyle="single"
+		borderColor="gray"
+		flexDirection="column"
+		flexShrink={0}
+		marginLeft={marginLeft}
+		minWidth={26}
+		paddingX={1}
+		paddingY={1}
+	>
+		<Text color="magenta" bold>
+			Current pack
+		</Text>
+		<Text color="gray">
+			{summary.totalMonsters} monster{summary.totalMonsters === 1 ? '' : 's'} total
+		</Text>
+		{summary.totalMonsters === 0 ? (
+			<Box marginTop={1}>
+				<Text color="gray">No monsters selected yet.</Text>
+			</Box>
+		) : (
+			<>
+				<CombatSelectionCartSection title="Mob groups" lines={summary.mobGroupLines} />
+				<CombatSelectionCartSection title="Individual mobs" lines={summary.monsterLines} />
+				{summary.mobGroupLines.length > 0 && (
+					<CombatSelectionCartSection title="Composition" lines={summary.compositionLines} />
+				)}
+			</>
+		)}
+	</Box>
+)
+
+const CustomCombatSetupPanel = ({
+	items,
+	selectedIndex,
+	selectedItem,
+	cartSummary,
+	showCompactDetails,
+	visibleRows,
+}: {
+	items: SelectableItem[]
+	selectedIndex: number
+	selectedItem?: SelectableItem
+	cartSummary: CombatSelectionCartSummary
+	showCompactDetails: boolean
+	visibleRows: number
+}) => {
+	if (showCompactDetails) {
+		return (
+			<Box flexDirection="column">
+				<SelectionList items={items} selectedIndex={selectedIndex} search="" visibleRows={visibleRows} />
+				<Box marginTop={1} flexDirection="column">
+					<SelectionDetails item={selectedItem} />
+					<Box marginTop={1}>
+						<CombatSelectionCart summary={cartSummary} marginLeft={0} />
+					</Box>
+				</Box>
+			</Box>
+		)
+	}
+
+	return (
+		<Box flexDirection="row">
+			<Box flexShrink={0}>
+				<SelectionList items={items} selectedIndex={selectedIndex} search="" visibleRows={visibleRows} />
+			</Box>
+			<SelectionDetails item={selectedItem} />
+			<CombatSelectionCart summary={cartSummary} />
 		</Box>
 	)
 }
@@ -736,14 +961,7 @@ const readCatalogIconLines = (defId: string): string[] => {
 	const normalizedDefId = normalizeCatalogIconDefId(defId)
 	const iconPath = join(ASSETS_ROOT, `${normalizedDefId}-sm.ansi`)
 
-	if (!existsSync(iconPath)) {
-		return fallbackCatalogIconLines
-	}
-
-	const lines = readFileSync(iconPath, 'utf8').replace(/\r\n/g, '\n').split('\n')
-	const lastLine = lines[lines.length - 1]
-
-	return lastLine === '' ? lines.slice(0, -1) : lines
+	return readAnsiFileLines(iconPath) ?? fallbackCatalogIconLines
 }
 
 const formatCharacterDetails = (character: PlayerCharacter): string =>
@@ -770,6 +988,57 @@ const formatMonsterDefinitionDetails = (definition: MonsterDef): string =>
 		'',
 		formatStats(definition.stats),
 	].join('\n')
+
+const formatMobGroupDetails = (
+	mobGroup: MobGroupDef,
+	getMonsterDefinition: (defId: string) => MonsterDef | undefined,
+	monsterCount: number,
+): string => {
+	const mobLines = Object.entries(mobGroup.mobs).map(([shortPath, count]) => {
+		const defId = shortPath.startsWith('characters/')
+			? shortPath
+			: `characters/monsters/${shortPath}`
+		const monster = getMonsterDefinition(defId)
+		const monsterName = monster?.name ?? definitionName(defId)
+
+		return `- ${monsterName} x${count}`
+	})
+
+	return [
+		`Name: ${mobGroup.name}`,
+		`Definition: ${mobGroup.defId}`,
+		`Monsters: ${monsterCount}`,
+		'',
+		'Mobs:',
+		...mobLines,
+		'',
+		'Enter adds one mob group. Backspace removes one mob group.',
+	].join('\n')
+}
+
+const formatSpotDetails = (
+	spot: SpotDef,
+	getMobGroupDefinition: (defId: string) => MobGroupDef | undefined,
+	monsterCount: number,
+): string => {
+	const mobGroupLines = spot.mobs.map((spotMob) => {
+		const mobGroup = getMobGroupDefinition(spotMob.defId)
+		const mobGroupName = mobGroup?.name ?? definitionName(spotMob.defId)
+
+		return `- ${mobGroupName} x${spotMob.count}`
+	})
+
+	return [
+		`Name: ${spot.name}`,
+		`Definition: ${spot.defId}`,
+		`Monsters: ${monsterCount}`,
+		'',
+		'Mob groups:',
+		...mobGroupLines,
+		'',
+		'Enter to fight this spot.',
+	].join('\n')
+}
 
 const formatEquipmentDefinitionDetails = (definition: ItemDef): string => {
 	const lines = [`Name: ${definition.name}`, `Definition: ${definition.defId}`, `Description: ${definition.description}`]
@@ -803,8 +1072,10 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 	const [fieldInput, setFieldInput] = useState('')
 	const [message, setMessage] = useState<MessageState | null>(null)
 	const [activeCharacter, setActiveCharacter] = useState<PlayerCharacter | null>(null)
-	const [combatMonsterSubtype, setCombatMonsterSubtype] = useState<MonsterSubtypeId | null>(null)
+	const [combatSetupMode, setCombatSetupMode] = useState<CombatSetupMode>('select')
+	const [combatCustomSelection, setCombatCustomSelection] = useState<CombatCustomSelection>(null)
 	const [combatMonsterCounts, setCombatMonsterCounts] = useState<Record<string, number>>({})
+	const [combatMobGroupCounts, setCombatMobGroupCounts] = useState<Record<string, number>>({})
 	const [combat, setCombat] = useState<CombatPaneState | null>(null)
 	const [combatLogScrollOffset, setCombatLogScrollOffset] = useState(0)
 	const combatLogFollowBottomRef = useRef(true)
@@ -837,15 +1108,33 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 		setForm(null)
 		setMessage(null)
 		setCombat(null)
-		setCombatMonsterSubtype(null)
+		setCombatSetupMode('select')
+		setCombatCustomSelection(null)
 		setCombatMonsterCounts({})
+		setCombatMobGroupCounts({})
 		setCombatLogScrollOffset(0)
 		combatLogFollowBottomRef.current = true
 		resetSelection()
 	}
 
+	const openCombatLevellingAreas = () => {
+		setCombatSetupMode('levelling-areas')
+		resetSelection()
+	}
+
+	const openCombatCustomSetup = () => {
+		setCombatSetupMode('custom')
+		setCombatCustomSelection(null)
+		resetSelection()
+	}
+
 	const openCombatMonsterSubtype = (subtypeId: MonsterSubtypeId) => {
-		setCombatMonsterSubtype(subtypeId)
+		setCombatCustomSelection(subtypeId)
+		resetSelection()
+	}
+
+	const openCombatMobGroups = () => {
+		setCombatCustomSelection('mob-groups')
 		resetSelection()
 	}
 
@@ -1140,7 +1429,41 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 		})
 	}
 
-	const combatEnemyIds = (): string[] => Object.entries(combatMonsterCounts).flatMap(([defId, count]) => Array.from({ length: count }, () => defId))
+	const incrementCombatMobGroupCount = (defId: string) => {
+		setCombatMobGroupCounts((counts) => ({
+			...counts,
+			[defId]: (counts[defId] ?? 0) + 1,
+		}))
+	}
+
+	const decrementCombatMobGroupCount = (defId: string) => {
+		setCombatMobGroupCounts((counts) => {
+			const count = counts[defId] ?? 0
+
+			if (count <= 1) {
+				const { [defId]: _removedCount, ...nextCounts } = counts
+				return nextCounts
+			}
+
+			return {
+				...counts,
+				[defId]: count - 1,
+			}
+		})
+	}
+
+	const combatEnemyIds = (): string[] => {
+		const individualEnemyIds = Object.entries(combatMonsterCounts).flatMap(([defId, count]) =>
+			Array.from({ length: count }, () => defId),
+		)
+		const mobGroupEnemyIds = Object.entries(combatMobGroupCounts).flatMap(([defId, count]) => {
+			const groupEnemyDefIds = services.definitions.resolveMobGroupEnemyDefIds(defId)
+
+			return Array.from({ length: count }, () => groupEnemyDefIds).flat()
+		})
+
+		return [...individualEnemyIds, ...mobGroupEnemyIds]
+	}
 
 	const combatMonsterSelectionCountForSubtype = (definitions: MonsterDef[], subtypeId: MonsterSubtypeId): number =>
 		filterMonsterDefinitionsBySubtype(definitions, subtypeId).reduce((count, definition) => count + (combatMonsterCounts[definition.defId] ?? 0), 0)
@@ -1154,13 +1477,13 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 		}))
 	}
 
-	const startPVMCombat = () => {
+	const startPVMCombat = (enemyDefIds?: string[]) => {
 		if (activeCharacter === null) {
 			showMessage('Load or create a character before starting combat.', 'menu')
 			return
 		}
 
-		const enemies = combatEnemyIds()
+		const enemies = enemyDefIds ?? combatEnemyIds()
 
 		if (enemies.length === 0) {
 			showMessage('Choose at least one monster before starting combat.', 'game')
@@ -1186,11 +1509,73 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			})
 	}
 
-	const combatSetupItems = (): SelectableItem[] => {
+	const combatModeSelectionItems = (): SelectableItem[] => [
+		{
+			label: 'Levelling areas',
+			detail: 'Fight predefined monster spots from levelling areas.',
+			action: openCombatLevellingAreas,
+		},
+		{
+			label: 'Custom',
+			detail: 'Build a custom monster pack for PvM combat.',
+			action: openCombatCustomSetup,
+		},
+	]
+
+	const combatLevellingAreaItems = (): SelectableItem[] => {
+		const mobGroupsByDefId = new Map(
+			services.definitions
+				.listMobGroupDefinitions()
+				.map((mobGroup) => [mobGroup.defId, mobGroup]),
+		)
+		const spots = [...services.definitions.listSpotDefinitions()].sort((left, right) =>
+			left.name.localeCompare(right.name),
+		)
+
+		if (spots.length === 0) {
+			return [
+				{
+					label: 'No levelling spots',
+					detail: 'Add spot definitions under content/definitions/spots.',
+					disabled: true,
+					action: () => {},
+				},
+			]
+		}
+
+		return spots.map((spot) => {
+			const enemyDefIds = services.definitions.resolveSpotEnemyDefIds(spot.defId)
+
+			return {
+				label: spot.name,
+				detail: formatSpotDetails(
+					spot,
+					(defId) => mobGroupsByDefId.get(defId),
+					enemyDefIds.length,
+				),
+				hint: spot.defId,
+				statusLabel: `${enemyDefIds.length} monster${enemyDefIds.length === 1 ? '' : 's'}`,
+				disabled: enemyDefIds.length === 0,
+				action: () => startPVMCombat(enemyDefIds),
+			}
+		})
+	}
+
+	const combatMobGroupSelectionCount = (): number =>
+		Object.entries(combatMobGroupCounts).reduce((total, [defId, count]) => {
+			const groupSize = services.definitions.resolveMobGroupEnemyDefIds(defId).length
+
+			return total + groupSize * count
+		}, 0)
+
+	const combatCustomSetupItems = (): SelectableItem[] => {
 		const enemies = combatEnemyIds()
 		const definitions = services.definitions.listMonsterDefinitions()
+		const mobGroupDefinitions = [...services.definitions.listMobGroupDefinitions()].sort((left, right) =>
+			left.name.localeCompare(right.name),
+		)
 
-		if (combatMonsterSubtype === null) {
+		if (combatCustomSelection === null) {
 			const subtypeItems = monsterSubtypes.map((subtype) => {
 				const definitionCount = filterMonsterDefinitionsBySubtype(definitions, subtype.id).length
 				const selectedCount = combatMonsterSelectionCountForSubtype(definitions, subtype.id)
@@ -1203,9 +1588,20 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 					action: () => openCombatMonsterSubtype(subtype.id),
 				}
 			})
+			const mobGroupSelectedCount = combatMobGroupSelectionCount()
 
 			return [
 				...subtypeItems,
+				{
+					label: 'Mob groups',
+					detail: 'Choose predefined mob groups for PvM combat.',
+					hint: `${mobGroupDefinitions.length} group${mobGroupDefinitions.length === 1 ? '' : 's'}`,
+					statusLabel:
+						mobGroupSelectedCount > 0
+							? `${mobGroupSelectedCount} selected`
+							: `${mobGroupDefinitions.length}`,
+					action: openCombatMobGroups,
+				},
 				{
 					label: 'Start Combat',
 					detail: 'Initiate combat with the selected monster pack.',
@@ -1216,7 +1612,62 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			]
 		}
 
-		const monsterDefinitions = filterMonsterDefinitionsBySubtype(definitions, combatMonsterSubtype)
+		if (combatCustomSelection === 'mob-groups') {
+			const monstersByDefId = new Map(
+				definitions.map((definition) => [definition.defId, definition]),
+			)
+			const mobGroupItems = mobGroupDefinitions.map((mobGroup) => {
+				const count = combatMobGroupCounts[mobGroup.defId] ?? 0
+				const monsterCount = services.definitions.resolveMobGroupEnemyDefIds(mobGroup.defId).length
+
+				return {
+					label: mobGroup.name,
+					detail: formatMobGroupDetails(
+						mobGroup,
+						(defId) => monstersByDefId.get(defId),
+						monsterCount,
+					),
+					hint: mobGroup.defId,
+					statusLabel: count > 0 ? `${count} selected` : undefined,
+					action: () => incrementCombatMobGroupCount(mobGroup.defId),
+					decrement: () => decrementCombatMobGroupCount(mobGroup.defId),
+				}
+			})
+			const emptyMobGroupItems: SelectableItem[] =
+				mobGroupItems.length === 0
+					? [
+							{
+								label: 'No mob groups',
+								detail: 'Add mob group definitions under content/definitions/characters/mob-groups.',
+								disabled: true,
+								action: () => {},
+							},
+						]
+					: []
+
+			return [
+				{
+					label: 'Change selection',
+					detail: 'Return to the custom setup menu without clearing selected mob groups.',
+					statusLabel: `${enemies.length} mob${enemies.length === 1 ? '' : 's'}`,
+					action: () => {
+						setCombatCustomSelection(null)
+						resetSelection()
+					},
+				},
+				...emptyMobGroupItems,
+				...mobGroupItems,
+				{
+					label: 'Start Combat',
+					detail: 'Initiate combat with the selected monster pack.',
+					disabled: enemies.length === 0,
+					statusLabel: `${enemies.length} monster${enemies.length === 1 ? '' : 's'}`,
+					action: startPVMCombat,
+				},
+			]
+		}
+
+		const monsterDefinitions = filterMonsterDefinitionsBySubtype(definitions, combatCustomSelection)
 		const monsterItems = monsterDefinitions.map((definition) => {
 			const count = combatMonsterCounts[definition.defId] ?? 0
 
@@ -1234,8 +1685,8 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			monsterItems.length === 0
 				? [
 						{
-							label: `No ${monsterSubtypeLabel(combatMonsterSubtype).toLowerCase()} mobs`,
-							detail: `Add monster definitions under ${monsterSubtypePrefix(combatMonsterSubtype)}.`,
+							label: `No ${monsterSubtypeLabel(combatCustomSelection).toLowerCase()} mobs`,
+							detail: `Add monster definitions under ${monsterSubtypePrefix(combatCustomSelection)}.`,
 							disabled: true,
 							action: () => {},
 						},
@@ -1245,10 +1696,10 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 		return [
 			{
 				label: 'Change subtype',
-				detail: 'Return to the mob subtype menu without clearing selected monsters.',
+				detail: 'Return to the custom mob subtype menu without clearing selected monsters.',
 				statusLabel: `${enemies.length} mob${enemies.length === 1 ? '' : 's'}`,
 				action: () => {
-					setCombatMonsterSubtype(null)
+					setCombatCustomSelection(null)
 					resetSelection()
 				},
 			},
@@ -1262,6 +1713,18 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 				action: startPVMCombat,
 			},
 		]
+	}
+
+	const combatSetupItems = (): SelectableItem[] => {
+		if (combatSetupMode === 'select') {
+			return combatModeSelectionItems()
+		}
+
+		if (combatSetupMode === 'levelling-areas') {
+			return combatLevellingAreaItems()
+		}
+
+		return combatCustomSetupItems()
 	}
 
 	const menuItems = (): SelectableItem[] => [
@@ -1336,10 +1799,21 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 
 		const normalized = search.toLowerCase()
 		return source.filter((item) => `${item.label} ${item.detail} ${item.hint ?? ''}`.toLowerCase().includes(normalized))
-	}, [screen, list, search, combatMonsterCounts, combatMonsterSubtype])
+	}, [screen, list, search, combatSetupMode, combatMonsterCounts, combatMobGroupCounts, combatCustomSelection])
 
 	const selectedItem = currentItems[selectedIndex]
 	const showCompactDetails = columns < 90
+	const combatSelectionCartSummary = useMemo(
+		() =>
+			buildCombatSelectionCartSummary(
+				combatMonsterCounts,
+				combatMobGroupCounts,
+				(defId) => services.definitions.listMonsterDefinitions().find((definition) => definition.defId === defId),
+				(defId) => services.definitions.listMobGroupDefinitions().find((mobGroup) => mobGroup.defId === defId),
+				(defId) => services.definitions.resolveMobGroupEnemyDefIds(defId),
+			),
+		[combatMonsterCounts, combatMobGroupCounts, services.definitions],
+	)
 
 	const visibleCombatLogRows = useMemo(() => {
 		const enemyRows = Math.max(1, combat?.enemies.length ?? 0)
@@ -1384,8 +1858,15 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			return
 		}
 
-		if (screen === 'combat-setup' && combatMonsterSubtype !== null) {
-			setCombatMonsterSubtype(null)
+		if (screen === 'combat-setup' && combatSetupMode === 'custom' && combatCustomSelection !== null) {
+			setCombatCustomSelection(null)
+			resetSelection()
+			return
+		}
+
+		if (screen === 'combat-setup' && combatSetupMode !== 'select') {
+			setCombatSetupMode('select')
+			setCombatCustomSelection(null)
 			resetSelection()
 			return
 		}
@@ -1552,7 +2033,12 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			return
 		}
 
-		if ((key.backspace || key.delete) && screen === 'combat-setup') {
+		if (
+			(key.backspace || key.delete) &&
+			screen === 'combat-setup' &&
+			combatSetupMode === 'custom' &&
+			combatCustomSelection !== null
+		) {
 			selectedItem?.decrement?.()
 			return
 		}
@@ -1569,9 +2055,15 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			: screen === 'game'
 				? 'Game'
 				: screen === 'combat-setup'
-					? combatMonsterSubtype === null
+					? combatSetupMode === 'select'
 						? 'Combat (PvM)'
-						: `Combat (PvM) > ${monsterSubtypeLabel(combatMonsterSubtype)}`
+						: combatSetupMode === 'levelling-areas'
+							? 'Combat (PvM) > Levelling areas'
+							: combatCustomSelection === null
+								? 'Combat (PvM) > Custom'
+								: combatCustomSelection === 'mob-groups'
+									? 'Combat (PvM) > Custom > Mob groups'
+									: `Combat (PvM) > Custom > ${monsterSubtypeLabel(combatCustomSelection)}`
 					: screen === 'combat'
 						? 'Combat'
 						: (list?.title ?? form?.title ?? 'Result')
@@ -1596,7 +2088,16 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 				) : screen === 'message' && message !== null ? (
 					<Text color="gray">{message.text}</Text>
 				) : screen === 'combat-setup' ? (
-					showCompactDetails ? (
+					combatSetupMode === 'custom' ? (
+						<CustomCombatSetupPanel
+							items={currentItems}
+							selectedIndex={selectedIndex}
+							selectedItem={selectedItem}
+							cartSummary={combatSelectionCartSummary}
+							showCompactDetails={showCompactDetails}
+							visibleRows={visibleSelectionRows}
+						/>
+					) : showCompactDetails ? (
 						<Box flexDirection="column">
 							<SelectionList items={currentItems} selectedIndex={selectedIndex} search="" visibleRows={visibleSelectionRows} />
 							<Box marginTop={1}>
