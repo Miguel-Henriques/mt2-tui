@@ -3,8 +3,7 @@ import { getCoreServices } from "../index.js";
 import { MonsterDef } from "./definitions/character-definitions.js";
 import { AttackResult, Character } from "./index.js";
 import { calculateHitDamage, Stats } from "./stats/index.js";
-import { calculatePhysicalDefense, SecondaryStats } from "./stats/secondary-stats.js";
-import { calculatePrimaryPhysicalDamage } from './stats/primary-stats.js';
+import { calculatePrimaryPhysicalDamage, calculatePrimaryPhysicalDefense } from './stats/primary-stats.js';
 
 export class Monster implements Character {
 
@@ -32,11 +31,13 @@ export class Monster implements Character {
 
         const stats: Stats = {
             healthPoints: definition.stats.healthPoints,
-            physicalDamage: calculatePrimaryPhysicalDamage(definition.level, definition.stats, 'Monster'),
-            damageSpread: 0,
-            physicalDefense: calculatePhysicalDefense(definition.level, definition.stats),
-            magicDefense: calculatePhysicalDefense(definition.level, definition.stats)
+            damageSpread: definition.stats.damageSpread ?? 0,
+            physicalDamage: calculatePrimaryPhysicalDamage(definition.level, definition.stats, 'Monster') + (definition.stats.physicalDamage ?? 0),
+            physicalDefense: calculatePrimaryPhysicalDefense(definition.level, definition.stats) + (definition.stats.physicalDefense ?? 0),
         }
+
+        stats.magicDamage = stats.physicalDamage ?? 0
+        stats.magicDefense = stats.physicalDefense ?? 0
 
         return stats
     }

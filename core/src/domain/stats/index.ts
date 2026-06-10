@@ -32,11 +32,14 @@ export type Stats = PrimaryStats & SecondaryStats & ExtraStats & SpeedStats;
 export function calculateHitDamage(initiator: { level: number, stats: Stats }): number {
     let initiatorPhysicalDamage = initiator.stats.physicalDamage ?? 0
 
+    // 1. Average damage multiplier
     if (initiator.stats.averageDamage) {
         initiatorPhysicalDamage *= 1 + initiator.stats.averageDamage / 100
     }
 
+    // 2. Damage roll
     const spread = initiator.stats.damageSpread ?? 0
+    // Some leaks suggest: damage roll * 2 + physical damage
     const damageRoll = Math.floor(Math.random() * (spread + 1))
         + initiatorPhysicalDamage
 
@@ -44,6 +47,9 @@ export function calculateHitDamage(initiator: { level: number, stats: Stats }): 
     //TODO: piercing
     //TODO: poison
     //TODO: stun
+
+    // 3. Attack accuracy factor //TODO:
+    //const accuracyMultiplier = calculateAccuracyAttackFactor(initiator.level, initiator.stats)
 
     return damageRoll
 }
@@ -60,4 +66,20 @@ export function mergeStats(...sources: Stats[]): Stats {
         }
     }
     return result
+}
+
+/**
+ * @experimental
+ */
+export function calculateAccuracyAttackFactor(level: number, stats: Stats): number {
+    const src = Math.min(90, (stats.dexterity ?? 0 * 4 + level * 2) / 6)
+    return Math.floor((src + 210) / 300)
+}
+
+/**
+ * @experimental
+ */
+export function calculateAccuracyEvasionFactor(level: number, stats: Stats): number {
+    const src = Math.min(90, (stats.dexterity ?? 0 * 4 + level * 2) / 6)
+    return Math.floor(((src * 2 + 5) / (src + 95)) * 0.3)
 }

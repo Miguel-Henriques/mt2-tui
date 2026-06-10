@@ -1,9 +1,9 @@
 import { getCoreServices } from "../index.js"
 import { calculateHitDamage, mergeStats, Stats } from "./stats/index.js"
 import { characterClassId, CharacterClassType } from "./definitions/character-definitions.js"
-import { calculateHp, calculateMagicDefense, calculateMp, calculatePhysicalDefense, SecondaryStats } from "./stats/secondary-stats.js"
+import { calculateHp, calculateMp, SecondaryStats } from "./stats/secondary-stats.js"
 import { AttackResult, Character } from "./index.js"
-import { calculatePrimaryMagicDamage, calculatePrimaryPhysicalDamage, PrimaryStats } from "./stats/primary-stats.js"
+import { calculatePrimaryMagicDamage, calculatePrimaryMagicDefense, calculatePrimaryPhysicalDamage, calculatePrimaryPhysicalDefense, PrimaryStats } from "./stats/primary-stats.js"
 
 export interface PlayerAccount {
     id: string
@@ -63,7 +63,7 @@ export class PlayerCharacter implements Character {
     private deriveEffectiveStats(): Stats {
         const classDefId = characterClassId(this.classType)
         const classInitialStats = getCoreServices().definitions.getCharacterClassDefinition(classDefId)
-        //TODO: gear stats
+        //TODO: gear stats (gear defense is halved for balance reasons (based on leaks))
 
         // 1. Merge stats from 3 sources: class initial stats, character progression and gear
         const stats = mergeStats(classInitialStats.stats, this.progression.spentStatPoints)
@@ -75,8 +75,8 @@ export class PlayerCharacter implements Character {
             physicalDamage: calculatePrimaryPhysicalDamage(this.level, stats, this.classType) + (stats.physicalDamage ?? 0),
             damageSpread: stats.damageSpread ?? 0,
             magicDamage: calculatePrimaryMagicDamage(this.level, stats) + (stats.magicDamage ?? 0),
-            physicalDefense: calculatePhysicalDefense(this.level, stats),
-            magicDefense: calculateMagicDefense(this.level, stats)
+            physicalDefense: calculatePrimaryPhysicalDefense(this.level, stats) + (stats.physicalDefense ?? 0),
+            magicDefense: calculatePrimaryMagicDefense(this.level, stats) + (stats.magicDefense ?? 0)
         }
 
         return {
@@ -121,5 +121,5 @@ export class PlayerCharacter implements Character {
  */
 export interface CharacterProgression {
     availableStatsPoints: number
-    spentStatPoints: Stats
+    spentStatPoints: PrimaryStats & { healthPoints?: number, manaPoints?: number }
 }

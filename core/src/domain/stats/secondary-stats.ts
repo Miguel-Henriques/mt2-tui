@@ -31,17 +31,6 @@ export interface SecondaryStats {
     magicDefense?: number
 }
 
-export function calculatePhysicalDefense(level: number, stats: Stats) {
-    return level + (stats.vitality ?? 0) + (stats.physicalDefense ?? 0);
-}
-
-/**
- * FIXME: german wiki mentions: MagicDefense = Level + INT + (VIT / 3) + ((Defense - VIT - Level) / 2)
- */
-export function calculateMagicDefense(level: number, stats: Stats) {
-    return level + (stats.intellect ?? 0) + ((stats.vitality ?? 0) * 3) + (stats.magicDefense ?? 0);
-}
-
 export function calculateHp(stats: Stats) {
     return (stats.healthPoints ?? 0) + (stats.vitality ?? 0) * 40;
 }

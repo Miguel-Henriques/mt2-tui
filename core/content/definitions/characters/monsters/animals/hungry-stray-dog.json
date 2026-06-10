@@ -1,0 +1,16 @@
+{
+	"defId": "characters/monsters/animals/hungry-stray-dog",
+	"name": "Hungry Stray Dog",
+	"stats": {
+		"healthPoints": 101,
+		"physicalDefense": 4,
+		"strength": 3,
+		"intellect": 2,
+		"vitality": 5,
+		"dexterity": 6,
+		"physicalDamage": 24,
+		"damageSpread": 6
+	},
+	"experience": 11,
+	"level": 1
+}

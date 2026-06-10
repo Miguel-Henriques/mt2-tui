@@ -1,0 +1,16 @@
+{
+	"defId": "characters/monsters/animals/wolf",
+	"name": "Wolf",
+	"stats": {
+		"healthPoints": 162,
+		"physicalDefense": 6,
+		"strength": 4,
+		"intellect": 2,
+		"vitality": 7,
+		"dexterity": 9,
+		"physicalDamage": 28,
+		"damageSpread": 4
+	},
+	"experience": 39,
+	"level": 3
+}

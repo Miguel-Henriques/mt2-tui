@@ -69,5 +69,13 @@ export function calculatePrimaryPhysicalDamage(level: number, stats: PrimaryStat
         }
     }
 
-    return level * 2 + classStatAttack(stats, classType);
+    return Math.floor(level * 2 + classStatAttack(stats, classType));
+}
+
+export function calculatePrimaryPhysicalDefense(level: number, stats: PrimaryStats) {
+    return level + (stats.vitality ?? 0);
+}
+
+export function calculatePrimaryMagicDefense(level: number, stats: PrimaryStats) {
+    return Math.floor(level + (stats.intellect ?? 0) + ((stats.vitality ?? 0) / 3));
 }

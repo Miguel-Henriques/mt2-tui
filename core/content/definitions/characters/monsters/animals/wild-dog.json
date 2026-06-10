@@ -7,7 +7,9 @@
 		"strength": 3,
 		"intellect": 2,
 		"vitality": 5,
-		"dexterity": 6
+		"dexterity": 6,
+		"physicalDamage": 20,
+		"damageSpread": 4
 	},
 	"gold": 10,
 	"goldSpread": 20,

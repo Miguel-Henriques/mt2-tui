@@ -26,7 +26,7 @@ Ninja skills for example, which are physical-damage based, will scale entirely v
 
 Obviously ninjas being skill-centered classes will benefit from greater skill damage multipliers than on-hit classes such as warriors, and the same goes between shamans and suras. That ensures each archetype brings different nuances to the game.
 
-#### Class-based multipliers (TODO)
+#### Class-based multipliers //TODO:
 
 image.png
 
@@ -54,6 +54,34 @@ Vitality: no multipliers
 Intellect:
 Strength: 1x for all classes
 Agility:
+
+### Hit Accuracy Multiplier (Dexterity) //TODO:
+
+attackRating is a hit/accuracy-style multiplier. It scales the attacker’s damage based mostly on attacker DEX/level versus victim DEX/level.
+
+In the source, it is calculated as:
+
+attackerSource = min(90, (attackerDEX _ 4 + attackerLevel _ 2) / 6)
+victimSource = min(90, (victimDEX _ 4 + victimLevel _ 2) / 6)
+
+attackFactor = (attackerSource + 210) / 300
+evasionFactor = ((victimSource _ 2 + 5) / (victimSource + 95)) _ 0.3
+
+`attackRating = attackFactor - evasionFactor`
+
+attackRating is a multiplier to total hit/skill damage.
+
+Formula
+
+```js
+attack = baseDamage + damageRoll - level * 2
+attack = attack * attackRating
+attack = attack + level * 2
+```
+
+The level scaling factor is excluded from the accuracy/evasion multiplier to smoothen the multiplier effect.
+
+`physical/magic damage = physical/magic damage * attackRating`
 
 ## References
 
