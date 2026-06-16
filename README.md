@@ -109,7 +109,7 @@ full converter guide for details.
 
 ## References
 
-https://en-wiki.metin2.gameforge.com/index.php/Ninja/armour
+https://en-wiki.metin2.gameforge.com/index.php
 
 ## License
 

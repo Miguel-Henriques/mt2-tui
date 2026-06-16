@@ -13,9 +13,14 @@
 		"tui": "tsx src/clients/tui/index.tsx"
 	},
 	"dependencies": {
+		"@ai-sdk/devtools": "^0.0.19",
+		"@ai-sdk/google": "^3.0.82",
 		"@types/react": "^19.2.16",
+		"ai": "^6.0.205",
 		"ink": "^7.0.5",
-		"react": "^19.2.7"
+		"react": "^19.2.7",
+		"yaml": "^2.9.0",
+		"zod": "^4.4.3"
 	},
 	"devDependencies": {
 		"@types/node": "^22.15.21",
