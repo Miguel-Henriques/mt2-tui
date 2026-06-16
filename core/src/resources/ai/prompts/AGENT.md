@@ -91,7 +91,3 @@ Do NOT invoke this tool if there isn't any skill description fitting for the use
 Parameters:
 
 - skill - the `name` of the skill
-
-## Available Skills
-
-${skillsList}

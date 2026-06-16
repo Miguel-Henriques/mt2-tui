@@ -2,7 +2,7 @@
 name: levelling
 description: Use for questions and recommendations regarding character progression, locations/spots to level up, experience obtained from killing mobs.
 license: MIT
-#allowed-tools: load-player-stats, load-game-catalog
+allowed-tools: load_player_stats, load_player_progression, search_levelling_spots, get_mob_definitions
 ---
 
 # Levelling
@@ -26,3 +26,4 @@ You can load game information, be it player-specific or generic, using the avail
 `load_player_stats`
 `load_player_progression`
 `search_levelling_spots`
+`get_mob_definitions`
