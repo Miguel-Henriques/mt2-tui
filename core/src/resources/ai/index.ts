@@ -1,4 +1,4 @@
-import { Agent, ModelMessage, Tool, ToolLoopAgent, ToolSet, wrapLanguageModel } from 'ai'
+import { ModelMessage, ToolLoopAgent, wrapLanguageModel } from 'ai'
 import { google } from '@ai-sdk/google'
 import { devToolsMiddleware } from '@ai-sdk/devtools'
 import { readFileSync } from 'node:fs'
@@ -8,7 +8,7 @@ import { scanDirectory } from '../../shared/scan-directory.js'
 import { activateSkill } from './tools/activate-skill.js'
 import { loadPlayerProgression } from './tools/load-player-progression.js'
 import { loadPlayerStats } from './tools/load-player-stats.js'
-import { AgentContext, CallOptions, CallOptionsSchema, ConverseEvent, ConverseInput, Session, Skill, ToolName } from './types.js'
+import { AgentContext, CallOptions, CallOptionsSchema, ConverseEvent, ConverseInput, Session, Skill, ToolName, ToolSet } from './types.js'
 
 export class AIService {
 
@@ -32,7 +32,7 @@ export class AIService {
     })
 
     // Runtime
-    private readonly agent: ToolLoopAgent<CallOptions, ToolSet>
+    private readonly agent: ToolLoopAgent<any, any>
     private readonly sessions = new Map<string, Session>()
 
     constructor() {
@@ -44,7 +44,7 @@ export class AIService {
         this.agent = this.createAgent(systemPrompt, skills)
     }
 
-    createAgent(systemMessage: string, skills: Map<string, Skill>): ToolLoopAgent<any, ToolSet> {
+    createAgent(systemMessage: string, skills: Map<string, Skill>) {
         return new ToolLoopAgent({
             model: this.providerWithDevTools,
             instructions: systemMessage,
@@ -57,7 +57,7 @@ export class AIService {
                 activate_skill: activateSkill(skills),
                 load_player_stats: loadPlayerStats,
                 load_player_progression: loadPlayerProgression
-            },
+            } satisfies ToolSet,
             callOptionsSchema: CallOptionsSchema,
             /**
              * Agent Context.
