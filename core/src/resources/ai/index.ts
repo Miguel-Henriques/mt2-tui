@@ -1,4 +1,4 @@
-import { ModelMessage, Tool, ToolLoopAgent, ToolSet, wrapLanguageModel } from 'ai'
+import { Agent, ModelMessage, Tool, ToolLoopAgent, ToolSet, wrapLanguageModel } from 'ai'
 import { google } from '@ai-sdk/google'
 import { devToolsMiddleware } from '@ai-sdk/devtools'
 import { readFileSync } from 'node:fs'
@@ -8,7 +8,7 @@ import { scanDirectory } from '../../shared/scan-directory.js'
 import { activateSkill } from './tools/activate-skill.js'
 import { loadPlayerProgression } from './tools/load-player-progression.js'
 import { loadPlayerStats } from './tools/load-player-stats.js'
-import { AgentContext, ConverseEvent, ConverseInput, Skill, ToolName } from './types.js'
+import { AgentContext, CallOptions, CallOptionsSchema, ConverseEvent, ConverseInput, Session, Skill, ToolName } from './types.js'
 
 export class AIService {
 
@@ -32,8 +32,8 @@ export class AIService {
     })
 
     // Runtime
-    private readonly agent: ToolLoopAgent<any, ToolSet>
-    private readonly sessions = new Map<string, ModelMessage[]>()
+    private readonly agent: ToolLoopAgent<CallOptions, ToolSet>
+    private readonly sessions = new Map<string, Session>()
 
     constructor() {
         const skills = AIService.discoverSkills()
@@ -58,17 +58,27 @@ export class AIService {
                 load_player_stats: loadPlayerStats,
                 load_player_progression: loadPlayerProgression
             },
+            callOptionsSchema: CallOptionsSchema,
             /**
              * Agent Context.
              * 
              * Behaves similarly to LangGraph graph state as a way to
              * communicate state between steps and use state-based conditions.
+             * 
+             * Runs: once per agent call (not LLM call)
              */
-            experimental_context: {
-                activatedSkills: new Set<string>()
-            } as AgentContext,
+            prepareCall: ({ options, ...callArgs }) => ({
+                ...callArgs,
+                experimental_context: {
+                    playerId: options.playerId,
+                    activatedSkills: new Set(options.activatedSkills)
+                } satisfies AgentContext
+            }),
             /**
              * Update agent state to reflect the activated skills.
+             * 
+             * No-op if no tool calls are made or the tool call is skill activation.
+             * 
              */
             onStepFinish: ({ toolResults, experimental_context }) => {
                 const context = experimental_context as AgentContext
@@ -84,6 +94,7 @@ export class AIService {
             },
             /**
              * Narrow down the available tools to only the ones that are relevant to the activated skills.
+             * 
              */
             prepareStep: ({ experimental_context }) => ({
                 activeTools: AIService.getActiveTools(
@@ -94,17 +105,17 @@ export class AIService {
         })
     }
 
-    clearSession(sessionId: string): void {
-        this.sessions.delete(sessionId)
-    }
-
     async *converse(input: ConverseInput): AsyncGenerator<ConverseEvent> {
-        const sessionHistory = this.getSessionMessages(input.sessionId) //TODO: update playerId in experimental context
-        sessionHistory.push({ role: 'user', content: input.content })
+        const sessionId = this.getSession(input.sessionId, input.playerId) //TODO: update playerId in experimental context
+        const session = this.runCommand(sessionId, 'get')!
+        this.runCommand(sessionId, 'append-message', { message: { role: 'user', content: input.content } })
 
         const result = await this.agent.stream({
-            messages: sessionHistory,
-            options: {},
+            messages: session.messages,
+            options: {
+                activatedSkills: session.context.activatedSkills,
+                playerId: session.context.playerId
+            },
             abortSignal: input.abortSignal,
         })
 
@@ -123,28 +134,53 @@ export class AIService {
                 }
             }
 
-            sessionHistory.push({ role: 'assistant', content: assistantText })
+            this.runCommand(sessionId, 'append-message', { message: { role: 'assistant', content: assistantText } })
             //FIXME: tool call messages should be added to the session history as well
         } catch (error) {
-            sessionHistory.pop()
+            this.runCommand(sessionId, 'pop-message')
             throw error
+        }
+    }
+
+    private runCommand(sessionId: string, command: 'append-message' | 'pop-message' | 'delete' | 'get', additionalArgs?: { message: ModelMessage }): void | Session {
+        switch (command) {
+            case 'append-message':
+                if (additionalArgs?.message === undefined) {
+                    throw new Error('Message is required')
+                }
+                this.sessions.get(sessionId)?.messages.push(additionalArgs?.message)
+                break
+            case 'pop-message':
+                this.sessions.get(sessionId)?.messages.pop()
+                break
+            case 'delete':
+                this.sessions.delete(sessionId)
+                break
+            case 'get':
+                return this.sessions.get(sessionId)
         }
     }
 
     /**
      * Includes logic to bootstrap a new session.
      */
-    private getSessionMessages(sessionId: string): ModelMessage[] {
+    private getSession(sessionId: string, playerId: string): string {
         const existingSession = this.sessions.get(sessionId)
 
         if (existingSession !== undefined) {
-            return existingSession
+            return sessionId
         }
 
-        const session: ModelMessage[] = []
+        const session: Session = {
+            messages: [],
+            context: {
+                activatedSkills: new Set(),
+                playerId
+            }
+        }
         this.sessions.set(sessionId, session)
 
-        return session
+        return sessionId
     }
 
     /**

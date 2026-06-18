@@ -1,4 +1,5 @@
-import { Tool } from "ai"
+import { ModelMessage, Tool } from "ai"
+import { z } from "zod"
 
 /**
  * Represents a discovered skill.
@@ -42,3 +43,15 @@ export interface ConverseInput {
     content: string
     abortSignal?: AbortSignal
 }
+
+export interface Session {
+    messages: ModelMessage[],
+    context: AgentContext
+}
+
+export type CallOptions = z.infer<typeof CallOptionsSchema>
+
+export const CallOptionsSchema = z.object({
+    activatedSkills: z.set(z.string()),
+    playerId: z.string(),
+})
