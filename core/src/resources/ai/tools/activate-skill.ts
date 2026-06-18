@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from 'zod';
-import { Skill } from "../index.js";
+import { Skill } from "../types.js";
 
 /**
  * Uses tool-based skill activation.

@@ -1,84 +1,69 @@
-import { ModelMessage, streamText, Tool, ToolLoopAgent, wrapLanguageModel } from "ai";
-import { google } from '@ai-sdk/google';
-import { devToolsMiddleware } from "@ai-sdk/devtools";
+import { ModelMessage, Tool, ToolLoopAgent, ToolSet, wrapLanguageModel } from 'ai'
+import { google } from '@ai-sdk/google'
+import { devToolsMiddleware } from '@ai-sdk/devtools'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'yaml'
-
 import { scanDirectory } from '../../shared/scan-directory.js'
 import { activateSkill } from './tools/activate-skill.js'
-import { loadPlayerStats } from "./tools/load-player-stats.js";
-import { loadPlayerProgression } from "./tools/load-player-progression.js";
-
-/**
- * Represents a discovered skill.
- * 
- * Skill content (body) is kept in memory for faster retrieval during activation.
- * Can be improved with hybrid retrieval (in-memory + on-demand) if memory constraints become an issue.
- */
-export interface Skill {
-    name: string
-    description: string
-    body: string
-    allowedTools: string[]
-    //location
-}
-
-export interface AgentContext {
-    activatedSkills: Set<string>
-}
-
-export type ToolName = 'activate_skill' | 'load_player_stats' | 'load_player_progression'
+import { loadPlayerProgression } from './tools/load-player-progression.js'
+import { loadPlayerStats } from './tools/load-player-stats.js'
+import { AgentContext, ConverseEvent, ConverseInput, Skill, ToolName } from './types.js'
 
 export class AIService {
 
     // Provider configs
     readonly MODEL_ID = 'gemini-3.1-flash-lite'
-    readonly provider = google(this.MODEL_ID)
+    private readonly provider = google(this.MODEL_ID)
     readonly providerOptions = {
         google: {
             thinkingConfig: {
                 thinkingLevel: 'low',
-                includeThoughts: true
+                includeThoughts: true,
             },
-        }
+        },
     }
     readonly maxOutputTokens = 1000
 
     // Tracing
-    readonly providerWithDevTools = wrapLanguageModel({
+    private readonly providerWithDevTools = wrapLanguageModel({
         model: this.provider,
         middleware: devToolsMiddleware(),
     })
 
-    readonly tools: Record<ToolName, any> = {
-        activate_skill: activateSkill,
-        load_player_stats: loadPlayerStats,
-        load_player_progression: loadPlayerProgression
-    }
-
     // Runtime
-    readonly skills: Map<string, Skill> = new Map()
-    readonly agent: ToolLoopAgent<AgentContext, Record<ToolName, any>>
+    private readonly agent: ToolLoopAgent<any, ToolSet>
+    private readonly sessions = new Map<string, ModelMessage[]>()
 
     constructor() {
-        this.skills = AIService.discoverSkills()
-        this.agent = this.createAgent()
+        const skills = AIService.discoverSkills()
+        const systemPrompt = readFileSync(
+            join(import.meta.dirname, 'prompts', 'AGENT.md'),
+            'utf8',
+        )
+        this.agent = this.createAgent(systemPrompt, skills)
     }
 
-    createAgent() {
+    createAgent(systemMessage: string, skills: Map<string, Skill>): ToolLoopAgent<any, ToolSet> {
         return new ToolLoopAgent({
             model: this.providerWithDevTools,
-            instructions: readFileSync(join(import.meta.dirname, 'prompts', 'AGENT.md'), 'utf8'),
+            instructions: systemMessage,
             maxOutputTokens: this.maxOutputTokens,
             providerOptions: this.providerOptions,
+            /**
+             * List of tools
+             */
+            tools: {
+                activate_skill: activateSkill(skills),
+                load_player_stats: loadPlayerStats,
+                load_player_progression: loadPlayerProgression
+            },
             /**
              * Agent Context.
              * 
              * Behaves similarly to LangGraph graph state as a way to
              * communicate state between steps and use state-based conditions.
              */
-            tools: this.tools,
             experimental_context: {
                 activatedSkills: new Set<string>()
             } as AgentContext,
@@ -86,36 +71,80 @@ export class AIService {
              * Update agent state to reflect the activated skills.
              */
             onStepFinish: ({ toolResults, experimental_context }) => {
+                const context = experimental_context as AgentContext
+
                 for (const result of toolResults) {
-                    if (result.toolName === 'activate_skill') {
-                        (experimental_context as AgentContext).activatedSkills.add(result.input as string)
+                    if (result.toolName !== 'activate_skill') {
+                        continue
                     }
+
+                    const input = result.input as { skill: string }
+                    context.activatedSkills.add(input.skill)
                 }
             },
             /**
              * Narrow down the available tools to only the ones that are relevant to the activated skills.
              */
-            prepareStep: ({ experimental_context }) => {
-                return {
-                    activeTools: AIService.getActiveTools(experimental_context as AgentContext, this.skills)
-                }
-            }
+            prepareStep: ({ experimental_context }) => ({
+                activeTools: AIService.getActiveTools(
+                    experimental_context as AgentContext,
+                    skills,
+                ),
+            }),
         })
     }
 
-    /**
-     * converseLevelling
-     * converseGear
-     * converseItemDrops
-     * converseGearRefinement
-     */
-    converse(message: ModelMessage) {
-        const result = streamText({
-            model: this.providerWithDevTools,
-            messages: [message]
+    clearSession(sessionId: string): void {
+        this.sessions.delete(sessionId)
+    }
+
+    async *converse(input: ConverseInput): AsyncGenerator<ConverseEvent> {
+        const sessionHistory = this.getSessionMessages(input.sessionId) //TODO: update playerId in experimental context
+        sessionHistory.push({ role: 'user', content: input.content })
+
+        const result = await this.agent.stream({
+            messages: sessionHistory,
+            options: {},
+            abortSignal: input.abortSignal,
         })
 
-        return result.textStream
+        let assistantText = ''
+
+        try {
+            for await (const part of result.fullStream) {
+                if (part.type === 'text-delta') {
+                    assistantText += part.text
+                    yield { type: 'text-delta', text: part.text }
+                    continue
+                }
+
+                if (part.type === 'tool-call') {
+                    yield { type: 'tool-call', toolName: part.toolName }
+                }
+            }
+
+            sessionHistory.push({ role: 'assistant', content: assistantText })
+            //FIXME: tool call messages should be added to the session history as well
+        } catch (error) {
+            sessionHistory.pop()
+            throw error
+        }
+    }
+
+    /**
+     * Includes logic to bootstrap a new session.
+     */
+    private getSessionMessages(sessionId: string): ModelMessage[] {
+        const existingSession = this.sessions.get(sessionId)
+
+        if (existingSession !== undefined) {
+            return existingSession
+        }
+
+        const session: ModelMessage[] = []
+        this.sessions.set(sessionId, session)
+
+        return session
     }
 
     /**
@@ -128,19 +157,19 @@ export class AIService {
         const skills: Map<string, Skill> = new Map()
         const skillsRoot = join(import.meta.dirname, 'skills')
 
-        const files = scanDirectory(skillsRoot, 'SKILL.md');
+        const files = scanDirectory(skillsRoot, 'SKILL.md')
         for (const file of files) {
             const name = file.split('/').shift() ?? 'unknown'
-            const content = readFileSync(file, 'utf8');
+            const content = readFileSync(file, 'utf8')
 
-            const frontmatter = AIService.parseSkillFrontmatter(content);
-            const body = AIService.stripSkillFrontmatter(content);
+            const frontmatter = AIService.parseSkillFrontmatter(content)
+            const body = AIService.stripSkillFrontmatter(content)
 
             skills.set(name, {
                 name,
                 description: frontmatter.description,
                 body, // skill content eagerly loaded into memory but could be deferred to when activated only
-                allowedTools: frontmatter.allowedTools
+                allowedTools: frontmatter.allowedTools as ToolName[]
             });
         }
 
@@ -151,26 +180,35 @@ export class AIService {
      * Sourced from: https://ai-sdk.dev/cookbook/guides/agent-skills
      */
     private static parseSkillFrontmatter(content: string) {
-        const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-        if (!match?.[1]) throw new Error('No frontmatter found');
-        return parse(match[1]);
+        const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)
+        if (!match?.[1]) throw new Error('No frontmatter found')
+        return parse(match[1])
     }
 
     /**
      * Sourced from: https://ai-sdk.dev/cookbook/guides/agent-skills
      */
     private static stripSkillFrontmatter(content: string) {
-        const match = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
-        return match ? content.slice(match[0].length).trim() : content.trim();
+        const match = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/)
+        return match ? content.slice(match[0].length).trim() : content.trim()
     }
 
-    private static getActiveTools(context: AgentContext, skills: Map<string, Skill>): ToolName[] {
+    private static getActiveTools(
+        context: AgentContext,
+        skills: Map<string, Skill>,
+    ): ToolName[] {
+        const result: Set<ToolName> = new Set()
 
-        const result = Array.from(context.activatedSkills)
+        for (const activatedSkill of context.activatedSkills) {
+            skills.get(activatedSkill)?.allowedTools.forEach((tool) => result.add(tool))
+        }
 
-        if (skills.size > 0)
-            result.push('activate_skill')
+        if (skills.size > 0) {
+            result.add('activate_skill')
+        }
 
-        return result as ToolName[]
+        return Array.from(result)
     }
 }
+
+export const createAIService = (): AIService => new AIService()
