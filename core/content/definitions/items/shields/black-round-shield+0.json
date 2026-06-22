@@ -1,0 +1,17 @@
+{
+	"defId": "items/shields/black-round-shield+0",
+	"name": "Black Round Shield",
+	"description": "",
+	"type": "shield",
+	"wearableClasses": [
+		"warrior",
+		"ninja",
+		"sura",
+		"shaman"
+	],
+	"wearableFromLevel": 41,
+	"baseStats": {
+		"physicalDefense": 7,
+		"movementSpeed": -10
+	}
+}

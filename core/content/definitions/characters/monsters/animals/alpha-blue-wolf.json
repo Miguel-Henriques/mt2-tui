@@ -1,0 +1,17 @@
+{
+	"defId": "characters/monsters/animals/alpha-blue-wolf",
+	"name": "Alpha Blue Wolf",
+	"stats": {
+		"healthPoints": 297,
+		"physicalDefense": 13,
+		"strength": 14,
+		"intellect": 4,
+		"vitality": 16,
+		"dexterity": 8,
+		"physicalDamage": 33,
+		"damageSpread": 8
+	},
+	"experience": 111,
+	"level": 9,
+	"attackSpeed": 80
+}

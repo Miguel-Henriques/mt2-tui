@@ -1,0 +1,9 @@
+{
+    "defId": "characters/mob-groups/animals/dogs-and-wolves-variant-2",
+    "name": "Wild Dog x1, Hungry Stray Dog x1, Wolf x1",
+    "mobs": {
+        "animals/wild-dog": 1,
+        "animals/hungry-stray-dog": 1,
+        "animals/wolf": 1
+    }
+}

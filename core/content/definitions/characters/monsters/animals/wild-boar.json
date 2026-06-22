@@ -1,0 +1,17 @@
+{
+	"defId": "characters/monsters/animals/wild-boar",
+	"name": "Wild Boar",
+	"stats": {
+		"healthPoints": 248,
+		"physicalDefense": 11,
+		"strength": 14,
+		"intellect": 3,
+		"vitality": 10,
+		"dexterity": 7,
+		"physicalDamage": 30,
+		"damageSpread": 7
+	},
+	"experience": 87,
+	"level": 7,
+	"attackSpeed": 80
+}

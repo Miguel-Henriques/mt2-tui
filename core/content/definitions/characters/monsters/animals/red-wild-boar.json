@@ -1,0 +1,17 @@
+{
+	"defId": "characters/monsters/animals/red-wild-boar",
+	"name": "Red Wild Boar",
+	"stats": {
+		"healthPoints": 311,
+		"physicalDefense": 14,
+		"strength": 22,
+		"intellect": 4,
+		"vitality": 13,
+		"dexterity": 9,
+		"physicalDamage": 33,
+		"damageSpread": 12
+	},
+	"experience": 103,
+	"level": 10,
+	"attackSpeed": 80
+}

@@ -1,0 +1,16 @@
+{
+	"defId": "characters/monsters/animals/blue-wolf",
+	"name": "Blue Wolf",
+	"stats": {
+		"healthPoints": 225,
+		"physicalDefense": 9,
+		"strength": 9,
+		"intellect": 3,
+		"vitality": 6,
+		"dexterity": 12,
+		"physicalDamage": 25,
+		"damageSpread": 13
+	},
+	"experience": 75,
+	"level": 6
+}

@@ -1,0 +1,27 @@
+{
+    "defId": "spots/boars",
+    "name": "Boars",
+    "levelRange": "6-10",
+    "mobs": [
+        {
+            "defId": "characters/mob-groups/animals/boars-variant-1",
+            "count": 1,
+            "respawnTimeMs": 10000
+        },
+        {
+            "defId": "characters/mob-groups/animals/boars-variant-2",
+            "count": 2,
+            "respawnTimeMs": 10000
+        },
+        {
+            "defId": "characters/mob-groups/animals/boars-variant-3",
+            "count": 2,
+            "respawnTimeMs": 10000
+        },
+        {
+            "defId": "characters/mob-groups/animals/boars-variant-4",
+            "count": 1,
+            "respawnTimeMs": 10000
+        }
+    ]
+}

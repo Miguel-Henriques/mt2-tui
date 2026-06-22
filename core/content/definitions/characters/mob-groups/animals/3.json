@@ -1,9 +1,0 @@
-{
-    "defId": "characters/mob-groups/animals/3",
-    "name": "Animals 3",
-    "mobs": {
-        "animals/wild-dog": 1,
-        "animals/hungry-stray-dog": 1,
-        "animals/wolf": 1
-    }
-}

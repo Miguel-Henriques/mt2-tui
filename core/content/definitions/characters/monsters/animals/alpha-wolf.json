@@ -1,0 +1,16 @@
+{
+	"defId": "characters/monsters/animals/alpha-wolf",
+	"name": "Alpha Wolf",
+	"stats": {
+		"healthPoints": 182,
+		"physicalDefense": 7,
+		"strength": 8,
+		"intellect": 3,
+		"vitality": 10,
+		"dexterity": 5,
+		"physicalDamage": 25,
+		"damageSpread": 5
+	},
+	"experience": 51,
+	"level": 4
+}

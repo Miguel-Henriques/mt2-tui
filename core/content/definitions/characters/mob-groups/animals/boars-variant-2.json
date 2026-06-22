@@ -1,0 +1,8 @@
+{
+    "defId": "characters/mob-groups/animals/boars-variant-2",
+    "name": "Blue Wolf x2, Wild Boar x1",
+    "mobs": {
+        "animals/blue-wolf": 2,
+        "animals/wild-boar": 1
+    }
+}

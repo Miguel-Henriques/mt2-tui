@@ -1,0 +1,17 @@
+{
+	"defId": "items/shields/pentagonal-shield+0",
+	"name": "Pentagonal Shield",
+	"description": "",
+	"type": "shield",
+	"wearableClasses": [
+		"warrior",
+		"ninja",
+		"sura",
+		"shaman"
+	],
+	"wearableFromLevel": 21,
+	"baseStats": {
+		"physicalDefense": 5,
+		"movementSpeed": -6
+	}
+}

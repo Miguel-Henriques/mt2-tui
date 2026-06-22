@@ -1,0 +1,17 @@
+{
+	"defId": "items/shields/battle-shield+0",
+	"name": "Battle Shield",
+	"description": "",
+	"type": "shield",
+	"wearableClasses": [
+		"warrior",
+		"ninja",
+		"sura",
+		"shaman"
+	],
+	"wearableFromLevel": 1,
+	"baseStats": {
+		"physicalDefense": 3,
+		"movementSpeed": -2
+	}
+}

@@ -1,0 +1,7 @@
+{
+    "defId": "characters/mob-groups/animals/dogs-and-wolves-variant-3",
+    "name": "Hungry Stray Dog x3",
+    "mobs": {
+        "animals/hungry-stray-dog": 3
+    }
+}

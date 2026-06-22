@@ -110,6 +110,8 @@ full converter guide for details.
 ## References
 
 https://en-wiki.metin2.gameforge.com/index.php
+https://metinw.es.tl/Monstruos.htm
+https://metin2alerts.com/moblist
 
 ## License
 

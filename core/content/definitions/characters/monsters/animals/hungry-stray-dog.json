@@ -8,8 +8,8 @@
 		"intellect": 2,
 		"vitality": 5,
 		"dexterity": 6,
-		"physicalDamage": 24,
-		"damageSpread": 6
+		"physicalDamage": 18,
+		"damageSpread": 4
 	},
 	"experience": 11,
 	"level": 1

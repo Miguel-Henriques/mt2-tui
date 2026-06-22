@@ -1,0 +1,22 @@
+{
+    "defId": "spots/dogs-and-wolves",
+    "name": "Dogs and Wolves",
+    "levelRange": "1-5",
+    "mobs": [
+        {
+            "defId": "characters/mob-groups/animals/dogs-and-wolves-variant-1",
+            "count": 2,
+            "respawnTimeMs": 10000
+        },
+        {
+            "defId": "characters/mob-groups/animals/dogs-and-wolves-variant-2",
+            "count": 1,
+            "respawnTimeMs": 10000
+        },
+        {
+            "defId": "characters/mob-groups/animals/dogs-and-wolves-variant-3",
+            "count": 1,
+            "respawnTimeMs": 10000
+        }
+    ]
+}

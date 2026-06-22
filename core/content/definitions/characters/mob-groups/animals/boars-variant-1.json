@@ -1,0 +1,7 @@
+{
+    "defId": "characters/mob-groups/animals/boars-variant-1",
+    "name": "Blue Wolf x3",
+    "mobs": {
+        "animals/blue-wolf": 3
+    }
+}
