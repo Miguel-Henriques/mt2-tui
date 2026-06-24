@@ -44,5 +44,6 @@ export interface SpotMobEntry {
 export interface SpotDef {
     defId: string
     name: string
+    levelRange: string
     mobs: SpotMobEntry[]
 }

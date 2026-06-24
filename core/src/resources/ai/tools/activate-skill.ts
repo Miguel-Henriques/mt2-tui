@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from 'zod';
 import { Skill } from "../types.js";
+import { logger } from "../../../shared/logger.js";
 
 /**
  * Uses tool-based skill activation.
@@ -17,6 +18,11 @@ import { Skill } from "../types.js";
  * - enforce permissions 
  * - track tool activations for analytics and debugging 
  * 
+ * `location` is excluded from skill catalog since we don't use file-reading tools.
+ * 
+ * References:
+ * - https://agentskills.io/client-implementation/adding-skills-support#structured-wrapping
+ * 
  * @param skills - the skill catalog. Must be a non-empty map.
  */
 export const activateSkill = (skills: Map<string, Skill>) => {
@@ -26,7 +32,16 @@ export const activateSkill = (skills: Map<string, Skill>) => {
         The following skills provide specialized instructions for specific tasks.
         When a task matches a skill's description, call the activateSkill tool with the skill's name to load its full instructions.
 
-        ${`Available skills: ${Array.from(skills.values()).map(skill => { return { name: skill.name, description: skill.description } })}`}`
+        <available-skills>
+        ${Array.from(skills.values()).map(skill => {
+            return `
+            <skill>
+                <name>${skill.name}</name>
+                <description>${skill.description}</description>
+            </skill>
+            `
+        }).join('\n')}
+        </available-skills>`
         : 'No skills available. Do NOT use this tool.'
 
     return tool({
@@ -34,10 +49,11 @@ export const activateSkill = (skills: Map<string, Skill>) => {
         inputSchema: z.object({
             skill: z.string()
         }),
-        execute: async ({ skill }) => { //TODO: https://agentskills.io/client-implementation/adding-skills-support#structured-wrapping
+        execute: async ({ skill }) => {
             const skillObj = skills.get(skill)
 
             if (!skillObj) {
+                logger.error(`Unable to activate unknown skill: ${skill}.`)
                 return `Skill ${skill} not found.`
             }
 
@@ -46,6 +62,12 @@ export const activateSkill = (skills: Map<string, Skill>) => {
 
             ${skillObj.body}
 
+            Skill directory: /skills/${skill}
+            Relative paths in this skill are relative to the skill directory.
+
+            <skill_resources>
+                ${skillObj.resourcePaths.map(resourcePath => { return `<file>${resourcePath}</file>` }).join('\n')}
+            </skill_resources>
             </skill_content>
             `
         }

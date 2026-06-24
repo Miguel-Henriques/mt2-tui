@@ -7,6 +7,10 @@ import {
 	type GameSaveStateService,
 } from './resources/game-save-state/index.js'
 import {
+	createAIService,
+	type AIService,
+} from './resources/ai/index.js'
+import {
 	createSimulationService,
 	type SimulationService,
 } from './resources/simulations/index.js'
@@ -14,6 +18,7 @@ import { FileDefinitionRepository } from './storage/definitions/file-definition-
 import { FileGameSaveStateRepository } from './storage/game-save-state/file-game-save-state-repository.js'
 
 export interface CoreServices {
+	ai: AIService
 	definitions: DefinitionService
 	gameSaveState: GameSaveStateService
 	simulations: SimulationService
@@ -30,8 +35,10 @@ export const createCoreServices = (): CoreServices => {
 		gameSaveStateRepository,
 	)
 	const simulations = createSimulationService(gameSaveState)
+	const ai = createAIService()
 
 	return {
+		ai,
 		definitions,
 		gameSaveState,
 		simulations,
@@ -44,4 +51,4 @@ export const getCoreServices = (): CoreServices => {
 	return coreServices
 }
 
-export type { DefinitionService, GameSaveStateService, SimulationService }
+export type { AIService, DefinitionService, GameSaveStateService, SimulationService }

@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 
 import { Box, Text, useApp, useInput, useWindowSize } from 'ink'
@@ -15,11 +16,20 @@ import type {
 import type { EquipmentItemDef, ItemDef } from '../../domain/definitions/item-definitions.js'
 import type { PlayerCharacter } from '../../domain/player.js'
 import type { Stats } from '../../domain/stats/index.js'
+import type { ConverseEvent } from '../../resources/ai/index.js'
 import type { SnapshotCharacterState, PVMCombatSimulationUpdate, SimulationStatus } from '../../resources/simulations/index.js'
 import { ASSETS_ROOT } from '../../storage/content-paths.js'
+import {
+	AiChatPane,
+	getAiChatDisplayLineCount,
+	getAiChatMaxScrollOffset,
+	type AiChatEntry,
+	type AiChatState,
+} from './ai-chat-pane.js'
 import { supportsEmoji } from './supports-emoji.js'
 
 type Screen = 'menu' | 'form' | 'list' | 'game' | 'message' | 'combat-setup' | 'combat'
+type GamePanelMode = 'game' | 'ai'
 type BackTarget = 'menu' | 'catalog' | 'equipment' | 'game' | 'mobs'
 type EquipmentCategoryId = 'weapons' | 'armour' | 'helmets' | 'shoes' | 'belts' | 'earrings' | 'necklaces' | 'gloves' | 'shields' | 'bracelets'
 type MonsterSubtypeId = 'animals' | 'metins' | 'bosses' | 'orcs' | 'demons'
@@ -87,8 +97,10 @@ interface TuiAppProps {
 const characterClassTypes: CharacterClassType[] = ['Ninja', 'Shaman', 'Sura', 'Warrior']
 const minimumSelectionRows = 5
 const minimumCombatLogRows = 3
-const selectionRowsReservedForChrome = 18
+const minimumAiChatRows = 6
+const selectionRowsReservedForChrome = 19
 const combatRowsReservedForChrome = 22
+const aiChatRowsReservedForChrome = 14
 
 const monsterSubtypes: {
 	id: MonsterSubtypeId
@@ -291,7 +303,36 @@ const TitleBanner = () => (
 	</Box>
 )
 
-const FooterHelp = ({ screen }: { screen: Screen }) => {
+const isLoadedGameMenuScreen = (
+	screen: Screen,
+	activeCharacter: PlayerCharacter | null,
+): boolean =>
+	activeCharacter !== null && (screen === 'game' || screen === 'combat-setup')
+
+const FooterHelp = ({
+	screen,
+	gamePanelMode,
+	isLoadedGameMenu,
+}: {
+	screen: Screen
+	gamePanelMode: GamePanelMode
+	isLoadedGameMenu: boolean
+}) => {
+	const isAiMode = isLoadedGameMenu && gamePanelMode === 'ai'
+
+	if (isAiMode) {
+		return (
+			<Box borderStyle="single" borderColor="gray" paddingX={1}>
+				<Text color="gray">
+					<Text color="yellow">Enter</Text> send message
+					{' '}
+					<Text color="red">Shift+Tab</Text> /{' '}
+					<Text color="red">ESQ</Text> back to Game mode
+				</Text>
+			</Box>
+		)
+	}
+
 	const searchHelp =
 		screen === 'list' ? (
 			<>
@@ -314,14 +355,21 @@ const FooterHelp = ({ screen }: { screen: Screen }) => {
 	const moveHelp =
 		screen === 'combat' ? (
 			<>
-				<Text color="yellow">↑/↓</Text> scroll log
+				<Text color="yellow">↑/↓</Text> scroll
 			</>
 		) : (
 			<>
 				<Text color="yellow">↑/↓</Text> move
 			</>
 		)
-	const backHelp = screen === 'menu' ? null : <> b back</>
+	const backHelp =
+		screen === 'menu' ? null : <> b back</>
+	const modeToggleHelp = isLoadedGameMenu ? (
+		<>
+			{' '}
+			<Text color="red">Shift+Tab</Text> toggle mode
+		</>
+	) : null
 
 	return (
 		<Box borderStyle="single" borderColor="gray" paddingX={1}>
@@ -329,11 +377,24 @@ const FooterHelp = ({ screen }: { screen: Screen }) => {
 				{moveHelp}
 				{formHelp}
 				{backHelp}
-				{searchHelp} <Text color="yellow">q</Text> quit
+				{searchHelp}
+				{modeToggleHelp} <Text color="yellow">q</Text> quit
 			</Text>
 		</Box>
 	)
 }
+
+const GameModeTabs = ({ mode }: { mode: GamePanelMode }) => (
+	<Box justifyContent="flex-end" marginBottom={1}>
+		<Text color={mode === 'game' ? 'green' : 'gray'} bold={mode === 'game'}>
+			[Game]
+		</Text>
+		<Text> </Text>
+		<Text color={mode === 'ai' ? 'green' : 'gray'} bold={mode === 'ai'}>
+			[AI]
+		</Text>
+	</Box>
+)
 
 const SelectionList = ({ items, selectedIndex, search, visibleRows }: SelectionListProps) => {
 	const searchRows = search.length > 0 ? 1 : 0
@@ -693,9 +754,16 @@ const formatStatLine = (key: string, value: number | string, stats?: Stats): str
 	return `${formatStatPrefix(key)}${formatLabel(key)}: ${displayValue}`
 }
 
-const formatStats = (stats: Stats): string => {
+const monsterDetailExcludedStatKeys = new Set([
+	'dexterity',
+	'intellect',
+	'strength',
+	'vitality',
+])
+
+const formatStats = (stats: Stats, excludeKeys: ReadonlySet<string> = new Set()): string => {
 	const entries = Object.entries(stats)
-		.filter(([key, value]) => key !== 'damageSpread' && value !== undefined)
+		.filter(([key, value]) => key !== 'damageSpread' && !excludeKeys.has(key) && value !== undefined)
 		.sort(([left], [right]) => left.localeCompare(right))
 
 	if (entries.length === 0) {
@@ -902,6 +970,10 @@ const CombatPane = ({ combat, scrollOffset, showCompactDetails, visibleLogRows }
 	</Box>
 )
 
+const matchesShortcut = (input: string, shortcut: string): boolean =>
+	input.length === shortcut.length &&
+	input.toLowerCase() === shortcut.toLowerCase()
+
 const parseCharacterClassType = (value: string): CharacterClassType => {
 	const normalized = value.trim().toLowerCase()
 	const classType = characterClassTypes.find((item) => item.toLowerCase() === normalized)
@@ -980,13 +1052,10 @@ const formatClassDefinitionDetails = (definition: CharacterClassDef): string =>
 const formatMonsterDefinitionDetails = (definition: MonsterDef): string =>
 	[
 		`Name: ${definition.name ?? definitionName(definition.defId)}`,
-		`Definition: ${definition.defId}`,
 		`Level: ${definition.level}`,
 		`Experience: ${definition.experience}`,
-		`Gold: ${definition.gold}`,
-		`Gold Spread: ${definition.goldSpread}`,
 		'',
-		formatStats(definition.stats),
+		formatStats(definition.stats, monsterDetailExcludedStatKeys),
 	].join('\n')
 
 const formatMobGroupDetails = (
@@ -1079,6 +1148,13 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 	const [combat, setCombat] = useState<CombatPaneState | null>(null)
 	const [combatLogScrollOffset, setCombatLogScrollOffset] = useState(0)
 	const combatLogFollowBottomRef = useRef(true)
+	const [aiChat, setAiChat] = useState<AiChatState | null>(null)
+	const [aiChatInput, setAiChatInput] = useState('')
+	const [aiChatScrollOffset, setAiChatScrollOffset] = useState(0)
+	const aiChatFollowBottomRef = useRef(true)
+	const aiChatAbortRef = useRef<AbortController | null>(null)
+	const [gamePanelMode, setGamePanelMode] = useState<GamePanelMode>('game')
+	const aiSessionIdRef = useRef<string | null>(null)
 
 	const resetSelection = () => {
 		setSelectedIndex(0)
@@ -1099,7 +1175,23 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 		setList(null)
 		setForm(null)
 		setMessage(null)
+		setGamePanelMode('game')
 		resetSelection()
+	}
+
+	const loadPlayerGame = (character: PlayerCharacter) => {
+		if (aiSessionIdRef.current !== null) {
+			services.ai.runCommand(aiSessionIdRef.current, 'delete')
+		}
+
+		aiSessionIdRef.current = randomUUID()
+		abortAiChat()
+		setAiChat(null)
+		setAiChatInput('')
+		setAiChatScrollOffset(0)
+		setGamePanelMode('game')
+		setActiveCharacter(character)
+		openGame()
 	}
 
 	const openCombatSetup = () => {
@@ -1114,7 +1206,164 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 		setCombatMobGroupCounts({})
 		setCombatLogScrollOffset(0)
 		combatLogFollowBottomRef.current = true
+		setGamePanelMode('game')
 		resetSelection()
+	}
+
+	const abortAiChat = () => {
+		aiChatAbortRef.current?.abort()
+		aiChatAbortRef.current = null
+	}
+
+	const activateAiPanel = () => {
+		setAiChatScrollOffset(0)
+		aiChatFollowBottomRef.current = true
+		setAiChat((previousChat) => previousChat ?? { entries: [], status: 'idle' })
+	}
+
+	const toggleGamePanelMode = () => {
+		if (!isLoadedGameMenuScreen(screen, activeCharacter)) {
+			return
+		}
+
+		setGamePanelMode((previousMode) => {
+			if (previousMode === 'game') {
+				activateAiPanel()
+				return 'ai'
+			}
+
+			return 'game'
+		})
+	}
+
+	const isModeToggleKey = (key: { shift?: boolean; tab?: boolean }) =>
+		key.shift === true && key.tab === true
+
+	const appendAiChatEntry = (entry: AiChatEntry) => {
+		setAiChat((previousChat) => {
+			if (previousChat === null) {
+				return { entries: [entry], status: 'streaming' }
+			}
+
+			return {
+				...previousChat,
+				entries: [...previousChat.entries, entry],
+			}
+		})
+		setAiChatScrollOffset((offset) => offset + 1)
+		aiChatFollowBottomRef.current = true
+	}
+
+	const appendAiChatText = (text: string) => {
+		setAiChat((previousChat) => {
+			if (previousChat === null) {
+				return {
+					entries: [{ type: 'assistant', content: text }],
+					status: 'streaming',
+				}
+			}
+
+			const entries = [...previousChat.entries]
+			const lastEntry = entries.at(-1)
+
+			if (lastEntry?.type === 'assistant') {
+				entries[entries.length - 1] = {
+					type: 'assistant',
+					content: `${lastEntry.content}${text}`,
+				}
+			} else {
+				entries.push({ type: 'assistant', content: text })
+			}
+
+			return {
+				...previousChat,
+				entries,
+			}
+		})
+		aiChatFollowBottomRef.current = true
+	}
+
+	const handleConverseEvent = (event: ConverseEvent) => {
+		if (event.type === 'text-delta') {
+			appendAiChatText(event.text)
+			return
+		}
+
+		appendAiChatEntry({ type: 'tool', toolName: event.toolName })
+	}
+
+	const sendAiChatMessage = (content: string) => {
+		if (activeCharacter === null || aiChat?.status === 'streaming') {
+			return
+		}
+
+		const sessionId = aiSessionIdRef.current
+
+		if (sessionId === null) {
+			return
+		}
+
+		const trimmedContent = content.trim()
+
+		if (trimmedContent.length === 0) {
+			return
+		}
+
+		const playerId = activeCharacter.id
+
+		setAiChatInput('')
+		setAiChat((previousChat) => ({
+			entries: [
+				...(previousChat?.entries ?? []),
+				{ type: 'user', content: trimmedContent },
+			],
+			status: 'streaming',
+			error: undefined,
+		}))
+		setAiChatScrollOffset((offset) => offset + 1)
+		aiChatFollowBottomRef.current = true
+
+		const abortController = new AbortController()
+		aiChatAbortRef.current = abortController
+
+		void (async () => {
+			try {
+				for await (const event of services.ai.converse({
+					playerId,
+					sessionId,
+					content: trimmedContent,
+					abortSignal: abortController.signal,
+				})) {
+					handleConverseEvent(event)
+				}
+
+				setAiChat((previousChat) =>
+					previousChat === null
+						? { entries: [], status: 'idle' }
+						: { ...previousChat, status: 'idle', error: undefined },
+				)
+			} catch (error) {
+				if (abortController.signal.aborted) {
+					setAiChat((previousChat) =>
+						previousChat === null
+							? { entries: [], status: 'idle' }
+							: { ...previousChat, status: 'idle' },
+					)
+					return
+				}
+
+				const message = error instanceof Error ? error.message : String(error)
+				setAiChat((previousChat) =>
+					previousChat === null
+						? { entries: [], status: 'error', error: message }
+						: { ...previousChat, status: 'error', error: message },
+				)
+			} finally {
+				if (aiChatAbortRef.current === abortController) {
+					aiChatAbortRef.current = null
+				}
+			}
+		})()
 	}
 
 	const openCombatLevellingAreas = () => {
@@ -1223,8 +1472,7 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 					classType: parseCharacterClassType(fields.classType ?? ''),
 				})
 
-				setActiveCharacter(character)
-				openGame()
+				loadPlayerGame(character)
 			},
 		})
 	}
@@ -1246,8 +1494,7 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 						detail: formatCharacterDetails(character),
 						hint: `${character.classType}, level ${character.level}`,
 						action: () => {
-							setActiveCharacter(character)
-							openGame()
+							loadPlayerGame(character)
 						},
 					}))
 
@@ -1838,6 +2085,31 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 		setCombatLogScrollOffset(maxCombatLogScrollOffset)
 	}, [combat?.messages.length, maxCombatLogScrollOffset, screen])
 
+	const visibleAiChatRows = useMemo(
+		() => Math.max(minimumAiChatRows, rows - aiChatRowsReservedForChrome),
+		[rows],
+	)
+
+	const maxAiChatScrollOffset =
+		aiChat === null
+			? 0
+			: getAiChatMaxScrollOffset(aiChat.entries, visibleAiChatRows, aiChatScrollOffset)
+
+	useEffect(() => {
+		setAiChatScrollOffset((offset) => Math.min(offset, maxAiChatScrollOffset))
+	}, [maxAiChatScrollOffset])
+
+	const aiChatDisplayLineCount =
+		aiChat === null ? 0 : getAiChatDisplayLineCount(aiChat.entries)
+
+	useEffect(() => {
+		if (!aiChatFollowBottomRef.current || aiChat === null || gamePanelMode !== 'ai') {
+			return
+		}
+
+		setAiChatScrollOffset(maxAiChatScrollOffset)
+	}, [aiChatDisplayLineCount, maxAiChatScrollOffset, gamePanelMode])
+
 	const goBack = () => {
 		if (screen === 'menu') {
 			return
@@ -1929,6 +2201,14 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 	}
 
 	useInput((input, key) => {
+		if (isModeToggleKey(key)) {
+			toggleGamePanelMode()
+			return
+		}
+
+		const isLoadedGameMenu = isLoadedGameMenuScreen(screen, activeCharacter)
+		const isAiMode = isLoadedGameMenu && gamePanelMode === 'ai'
+
 		if (isSearching) {
 			if (key.return || key.escape) {
 				setIsSearching(false)
@@ -1988,17 +2268,66 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			return
 		}
 
-		if (input === 'q') {
+		if (isAiMode) {
+			if (key.escape) {
+				setGamePanelMode('game')
+				return
+			}
+
+			if (key.upArrow) {
+				setAiChatScrollOffset((offset) => {
+					const nextOffset = Math.max(0, offset - 1)
+					aiChatFollowBottomRef.current = false
+					return nextOffset
+				})
+				return
+			}
+
+			if (key.downArrow) {
+				setAiChatScrollOffset((offset) => {
+					const nextOffset = Math.min(maxAiChatScrollOffset, offset + 1)
+					aiChatFollowBottomRef.current = nextOffset >= maxAiChatScrollOffset
+					return nextOffset
+				})
+				return
+			}
+
+			if (aiChat?.status === 'streaming') {
+				return
+			}
+
+			if (key.return) {
+				sendAiChatMessage(aiChatInput)
+				return
+			}
+
+			if (key.backspace || key.delete) {
+				setAiChatInput((value) => value.slice(0, -1))
+				return
+			}
+
+			if (input.length > 0) {
+				setAiChatInput((value) => `${value}${input}`)
+			}
+
+			return
+		}
+
+		if (matchesShortcut(input, 'q')) {
 			exit()
 			return
 		}
 
-		if (screen === 'list' && input === '/') {
+		if (screen === 'list' && matchesShortcut(input, '/')) {
 			setIsSearching(true)
 			return
 		}
 
-		if (input === 'b' || key.escape) {
+		if (matchesShortcut(input, 'b') || key.escape) {
+			if (isAiMode) {
+				return
+			}
+
 			goBack()
 			return
 		}
@@ -2049,6 +2378,7 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 	})
 
 	const visibleSelectionRows = Math.max(minimumSelectionRows, rows - selectionRowsReservedForChrome)
+	const isLoadedGameMenu = isLoadedGameMenuScreen(screen, activeCharacter)
 	const title =
 		screen === 'menu'
 			? 'Main Menu'
@@ -2067,6 +2397,55 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 					: screen === 'combat'
 						? 'Combat'
 						: (list?.title ?? form?.title ?? 'Result')
+
+	const renderLoadedGameMenuContent = () => {
+		if (screen === 'game') {
+			return (
+				<GameActionsPanel
+					items={currentItems}
+					selectedIndex={selectedIndex}
+					selectedItem={selectedItem}
+					showCompactDetails={showCompactDetails}
+					visibleRows={visibleSelectionRows}
+				/>
+			)
+		}
+
+		if (screen === 'combat-setup') {
+			if (combatSetupMode === 'custom') {
+				return (
+					<CustomCombatSetupPanel
+						items={currentItems}
+						selectedIndex={selectedIndex}
+						selectedItem={selectedItem}
+						cartSummary={combatSelectionCartSummary}
+						showCompactDetails={showCompactDetails}
+						visibleRows={visibleSelectionRows}
+					/>
+				)
+			}
+
+			if (showCompactDetails) {
+				return (
+					<Box flexDirection="column">
+						<SelectionList items={currentItems} selectedIndex={selectedIndex} search="" visibleRows={visibleSelectionRows} />
+						<Box marginTop={1}>
+							<SelectionDetails item={selectedItem} />
+						</Box>
+					</Box>
+				)
+			}
+
+			return (
+				<Box flexDirection="row">
+					<SelectionList items={currentItems} selectedIndex={selectedIndex} search="" visibleRows={visibleSelectionRows} />
+					<SelectionDetails item={selectedItem} />
+				</Box>
+			)
+		}
+
+		return null
+	}
 
 	return (
 		<Box flexDirection="column" padding={1}>
@@ -2087,29 +2466,28 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 					<FormView form={form} fieldIndex={fieldIndex} input={fieldInput} />
 				) : screen === 'message' && message !== null ? (
 					<Text color="gray">{message.text}</Text>
-				) : screen === 'combat-setup' ? (
-					combatSetupMode === 'custom' ? (
-						<CustomCombatSetupPanel
-							items={currentItems}
-							selectedIndex={selectedIndex}
-							selectedItem={selectedItem}
-							cartSummary={combatSelectionCartSummary}
-							showCompactDetails={showCompactDetails}
-							visibleRows={visibleSelectionRows}
-						/>
-					) : showCompactDetails ? (
-						<Box flexDirection="column">
-							<SelectionList items={currentItems} selectedIndex={selectedIndex} search="" visibleRows={visibleSelectionRows} />
-							<Box marginTop={1}>
-								<SelectionDetails item={selectedItem} />
-							</Box>
+				) : isLoadedGameMenu && activeCharacter !== null ? (
+					<Box flexDirection={showCompactDetails ? 'column' : 'row'}>
+						<CharacterSummary character={activeCharacter} />
+						<Box
+							flexDirection="column"
+							flexGrow={1}
+							marginLeft={showCompactDetails ? 0 : 4}
+							marginTop={showCompactDetails ? 1 : 0}
+						>
+							<GameModeTabs mode={gamePanelMode} />
+							{gamePanelMode === 'ai' ? (
+								<AiChatPane
+									chat={aiChat ?? { entries: [], status: 'idle' }}
+									input={aiChatInput}
+									scrollOffset={aiChatScrollOffset}
+									visibleRows={visibleAiChatRows}
+								/>
+							) : (
+								renderLoadedGameMenuContent()
+							)}
 						</Box>
-					) : (
-						<Box flexDirection="row">
-							<SelectionList items={currentItems} selectedIndex={selectedIndex} search="" visibleRows={visibleSelectionRows} />
-							<SelectionDetails item={selectedItem} />
-						</Box>
-					)
+					</Box>
 				) : screen === 'combat' ? (
 					combat === null ? (
 						<Text color="gray">Starting combat...</Text>
@@ -2121,19 +2499,6 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 							visibleLogRows={visibleCombatLogRows}
 						/>
 					)
-				) : screen === 'game' && activeCharacter !== null ? (
-					<Box flexDirection={showCompactDetails ? 'column' : 'row'}>
-						<CharacterSummary character={activeCharacter} />
-						<Box flexGrow={1} marginLeft={showCompactDetails ? 0 : 4} marginTop={showCompactDetails ? 1 : 0}>
-							<GameActionsPanel
-								items={currentItems}
-								selectedIndex={selectedIndex}
-								selectedItem={selectedItem}
-								showCompactDetails={showCompactDetails}
-								visibleRows={visibleSelectionRows}
-							/>
-						</Box>
-					</Box>
 				) : showCompactDetails ? (
 					<Box flexDirection="column">
 						<SelectionList items={currentItems} selectedIndex={selectedIndex} search={search} visibleRows={visibleSelectionRows} />
@@ -2148,7 +2513,11 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 					</Box>
 				)}
 			</Box>
-			<FooterHelp screen={screen} />
+			<FooterHelp
+				screen={screen}
+				gamePanelMode={gamePanelMode}
+				isLoadedGameMenu={isLoadedGameMenu}
+			/>
 		</Box>
 	)
 }

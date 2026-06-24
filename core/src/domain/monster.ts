@@ -26,14 +26,17 @@ export class Monster implements Character {
 
     /**
      * Derived from mob.proto files
+     * 
+     * HP, damage and defense are defined in the definition files.
+     * Monster base stats affect the monster's accuracy/evasion multipliers but have no effect on its secondary stats.
      */
     private deriveEffectiveStats(definition: MonsterDef): Stats {
 
         const stats: Stats = {
             healthPoints: definition.stats.healthPoints,
-            damageSpread: definition.stats.damageSpread ?? 0,
-            physicalDamage: calculatePrimaryPhysicalDamage(definition.level, definition.stats, 'Monster') + (definition.stats.physicalDamage ?? 0),
-            physicalDefense: calculatePrimaryPhysicalDefense(definition.level, definition.stats) + (definition.stats.physicalDefense ?? 0),
+            damageSpread: definition.stats.damageSpread,
+            physicalDamage: definition.stats.physicalDamage,
+            physicalDefense: definition.stats.physicalDefense,
         }
 
         stats.magicDamage = stats.physicalDamage ?? 0

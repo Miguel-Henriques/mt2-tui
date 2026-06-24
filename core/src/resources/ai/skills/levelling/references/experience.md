@@ -151,7 +151,7 @@ level 1 -> 3 (1100 EXP)
 
 The level gap between the player and of its opponent have a multiplier effect in effective EXP gain. If the player's level is lower, he gets a few percent extra EXP. In contrast, if the opponent has a lower level, the player gets less EXP.
 
-The base value of possible EXP gain from monsters can be retrieved using the `get_mob_definitions` tool. The base is the number of EXP that you get if you have the same level as the opponent without any EXP boost.
+The base value of possible EXP gain from monsters can be retrieved using the `get_mobs` tool. The base is the number of EXP that you get if you have the same level as the opponent without any EXP boost.
 
 | level gap | exp multiplier |
 | --------- | -------------- |

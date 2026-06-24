@@ -4,11 +4,16 @@ import { devToolsMiddleware } from '@ai-sdk/devtools'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'yaml'
+import { logger } from '../../shared/logger.js'
 import { scanDirectory } from '../../shared/scan-directory.js'
 import { activateSkill } from './tools/activate-skill.js'
 import { loadPlayerProgression } from './tools/load-player-progression.js'
 import { loadPlayerStats } from './tools/load-player-stats.js'
-import { AgentContext, CallOptions, CallOptionsSchema, ConverseEvent, ConverseInput, Session, Skill, ToolName, ToolSet } from './types.js'
+import { AgentContext, CallOptionsSchema, ConverseEvent, ConverseInput, Session, Skill, ToolName, ToolSet } from './types.js'
+import { searchMobSpots } from './tools/search-mob-spots.js'
+import { getMobGroups } from './tools/get-mob-groups.js'
+import { getMobs } from './tools/get-mobs.js'
+import { readSkillResource } from './tools/read-skill-resource.js'
 
 export class AIService {
 
@@ -55,8 +60,12 @@ export class AIService {
              */
             tools: {
                 activate_skill: activateSkill(skills),
+                read_skill_resource: readSkillResource(skills),
                 load_player_stats: loadPlayerStats,
-                load_player_progression: loadPlayerProgression
+                load_player_progression: loadPlayerProgression,
+                search_mob_spots: searchMobSpots,
+                get_mob_groups: getMobGroups,
+                get_mobs: getMobs,
             } satisfies ToolSet,
             callOptionsSchema: CallOptionsSchema,
             /**
@@ -106,7 +115,7 @@ export class AIService {
     }
 
     async *converse(input: ConverseInput): AsyncGenerator<ConverseEvent> {
-        const sessionId = this.getSession(input.sessionId, input.playerId) //TODO: update playerId in experimental context
+        const sessionId = this.getSession(input.sessionId, input.playerId)
         const session = this.runCommand(sessionId, 'get')!
         this.runCommand(sessionId, 'append-message', { message: { role: 'user', content: input.content } })
 
@@ -137,6 +146,7 @@ export class AIService {
             this.runCommand(sessionId, 'append-message', { message: { role: 'assistant', content: assistantText } })
             //FIXME: tool call messages should be added to the session history as well
         } catch (error) {
+            logger.error('Error processing AI stream', { sessionId, error })
             this.runCommand(sessionId, 'pop-message')
             throw error
         }
@@ -200,16 +210,53 @@ export class AIService {
 
             const frontmatter = AIService.parseSkillFrontmatter(content)
             const body = AIService.stripSkillFrontmatter(content)
+            const resourcePaths = AIService.extractResourcePaths(body)
 
             skills.set(name, {
                 name,
                 description: frontmatter.description,
-                body, // skill content eagerly loaded into memory but could be deferred to when activated only
-                allowedTools: frontmatter.allowedTools as ToolName[]
+                body, // skill content eagerly loaded into memory but could be deferred to activation time
+                allowedTools: frontmatter.allowedTools as ToolName[],
+                resourcePaths,
             });
         }
 
         return skills
+    }
+
+    //TODO: Move to skills utils, add unit tests. Same goes for parseSkillFrontmatter, stripSkillFrontmatter
+    private static extractResourcePaths(body: string): string[] {
+        const withoutCodeBlocks = body.replace(/```[\s\S]*?```/g, '')
+        const linkPattern = /\[([^\]]*)\]\(([^)]+)\)/g
+        const paths = new Set<string>()
+
+        for (const match of withoutCodeBlocks.matchAll(linkPattern)) {
+            const rawPath = match[2]?.trim()
+
+            if (rawPath === undefined || rawPath === '') {
+                continue
+            }
+
+            if (
+                rawPath.startsWith('#')
+                || rawPath.startsWith('http://')
+                || rawPath.startsWith('https://')
+                || rawPath.startsWith('mailto:')
+                || rawPath.startsWith('tel:')
+            ) {
+                continue
+            }
+
+            const normalizedPath = rawPath.replace(/^\.\//, '')
+
+            if (normalizedPath.includes('..')) {
+                continue
+            }
+
+            paths.add(normalizedPath)
+        }
+
+        return Array.from(paths)
     }
 
     /**
@@ -241,10 +288,13 @@ export class AIService {
 
         if (skills.size > 0) {
             result.add('activate_skill')
+            result.add('read_skill_resource')
         }
 
         return Array.from(result)
     }
 }
+
+export type { ConverseEvent, ConverseInput } from './types.js'
 
 export const createAIService = (): AIService => new AIService()

@@ -54,13 +54,12 @@ export function calculatePrimaryMagicDamage(level: number, stats: PrimaryStats):
  *  - weapon damage roll
  *  - target defense and resistances 
  */
-export function calculatePrimaryPhysicalDamage(level: number, stats: PrimaryStats, classType: CharacterClassType | 'Monster'): number {
+export function calculatePrimaryPhysicalDamage(level: number, stats: PrimaryStats, classType: CharacterClassType): number {
 
-    const classStatAttack = (stats: PrimaryStats, classType: CharacterClassType | 'Monster') => {
+    const classStatAttack = (stats: PrimaryStats, classType: CharacterClassType) => {
         switch (classType) {
             case "Warrior":
             case "Sura":
-            case "Monster":
                 return 2 * (stats.strength ?? 0)
             case "Ninja":
                 return (4 * (stats.strength ?? 0) + 2 * (stats.dexterity ?? 0)) / 3

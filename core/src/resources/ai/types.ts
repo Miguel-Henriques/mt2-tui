@@ -12,6 +12,10 @@ export interface Skill {
     description: string
     body: string
     allowedTools: ToolName[]
+    /**
+     * List of resources paths that can be progressively loaded
+     */
+    resourcePaths: string[]
     //location
 }
 
@@ -22,8 +26,12 @@ export interface AgentContext {
 
 export type ToolName =
     | 'activate_skill'
+    | 'read_skill_resource'
     | 'load_player_stats'
     | 'load_player_progression'
+    | 'search_mob_spots'
+    | 'get_mob_groups'
+    | 'get_mobs'
 
 
 export type ToolSet = {
