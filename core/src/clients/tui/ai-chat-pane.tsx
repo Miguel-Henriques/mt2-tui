@@ -5,11 +5,11 @@ export type AiChatEntry =
 	| { type: 'user'; content: string }
 	| { type: 'assistant'; content: string }
 	| { type: 'tool'; toolName: string }
+	| { type: 'error'; content: string }
 
 export interface AiChatState {
 	entries: AiChatEntry[]
-	status: 'idle' | 'streaming' | 'error'
-	error?: string
+	status: 'idle' | 'streaming'
 }
 
 interface AiChatPaneProps {
@@ -23,6 +23,7 @@ type DisplayLine =
 	| { type: 'user'; content: string }
 	| { type: 'assistant'; content: string }
 	| { type: 'tool'; toolName: string }
+	| { type: 'error'; content: string }
 
 const userMessageHighlight = '#2f2b26'
 
@@ -34,6 +35,10 @@ const flattenChatEntries = (entries: AiChatEntry[]): DisplayLine[] =>
 
 		if (entry.type === 'tool') {
 			return [{ type: 'tool', toolName: entry.toolName }]
+		}
+
+		if (entry.type === 'error') {
+			return [{ type: 'error', content: entry.content }]
 		}
 
 		const contentLines = entry.content.split('\n')
@@ -125,6 +130,10 @@ const DisplayLineView = ({ line }: { line: DisplayLine }) => {
 		)
 	}
 
+	if (line.type === 'error') {
+		return <Text color="red">{line.content}</Text>
+	}
+
 	return <AssistantLine line={line.content} />
 }
 
@@ -179,9 +188,6 @@ export const AiChatPane = ({ chat, input, scrollOffset, visibleRows }: AiChatPan
 					{chat.status === 'streaming' ? '' : input}
 					{chat.status === 'idle' && <Text>█</Text>}
 				</Text>
-				{chat.status === 'error' && chat.error !== undefined && (
-					<Text color="red">{chat.error}</Text>
-				)}
 			</Box>
 		</Box>
 	)

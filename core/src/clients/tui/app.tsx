@@ -1289,6 +1289,11 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 			return
 		}
 
+		if (event.type === 'error') {
+			appendAiChatEntry({ type: 'error', content: event.message })
+			return
+		}
+
 		appendAiChatEntry({ type: 'tool', toolName: event.toolName })
 	}
 
@@ -1318,7 +1323,6 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 				{ type: 'user', content: trimmedContent },
 			],
 			status: 'streaming',
-			error: undefined,
 		}))
 		setAiChatScrollOffset((offset) => offset + 1)
 		aiChatFollowBottomRef.current = true
@@ -1340,23 +1344,13 @@ export const TuiApp = ({ services }: TuiAppProps) => {
 				setAiChat((previousChat) =>
 					previousChat === null
 						? { entries: [], status: 'idle' }
-						: { ...previousChat, status: 'idle', error: undefined },
+						: { ...previousChat, status: 'idle' },
 				)
-			} catch (error) {
-				if (abortController.signal.aborted) {
-					setAiChat((previousChat) =>
-						previousChat === null
-							? { entries: [], status: 'idle' }
-							: { ...previousChat, status: 'idle' },
-					)
-					return
-				}
-
-				const message = error instanceof Error ? error.message : String(error)
+			} catch {
 				setAiChat((previousChat) =>
 					previousChat === null
-						? { entries: [], status: 'error', error: message }
-						: { ...previousChat, status: 'error', error: message },
+						? { entries: [], status: 'idle' }
+						: { ...previousChat, status: 'idle' },
 				)
 			} finally {
 				if (aiChatAbortRef.current === abortController) {

@@ -3,17 +3,26 @@ import { google } from '@ai-sdk/google'
 import { devToolsMiddleware } from '@ai-sdk/devtools'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { parse } from 'yaml'
-import { logger } from '../../shared/logger.js'
-import { scanDirectory } from '../../shared/scan-directory.js'
+
+import { logger, serializeError } from '../../shared/logger.js'
 import { activateSkill } from './tools/activate-skill.js'
 import { loadPlayerProgression } from './tools/load-player-progression.js'
 import { loadPlayerStats } from './tools/load-player-stats.js'
-import { AgentContext, CallOptionsSchema, ConverseEvent, ConverseInput, Session, Skill, ToolName, ToolSet } from './types.js'
+import {
+    AgentContext,
+    CallOptionsSchema,
+    ConverseEvent,
+    ConverseInput,
+    Session,
+    Skill,
+    ToolName,
+    ToolSet,
+} from './types.js'
 import { searchMobSpots } from './tools/search-mob-spots.js'
 import { getMobGroups } from './tools/get-mob-groups.js'
 import { getMobs } from './tools/get-mobs.js'
 import { readSkillResource } from './tools/read-skill-resource.js'
+import { SkillUtils } from './utils/skill-utils.js'
 
 export class AIService {
 
@@ -41,7 +50,7 @@ export class AIService {
     private readonly sessions = new Map<string, Session>()
 
     constructor() {
-        const skills = AIService.discoverSkills()
+        const skills = SkillUtils.discoverSkills(join(import.meta.dirname, 'skills'))
         const systemPrompt = readFileSync(
             join(import.meta.dirname, 'prompts', 'AGENT.md'),
             'utf8',
@@ -130,6 +139,20 @@ export class AIService {
 
         let assistantText = ''
 
+        const handleStreamFailure = (error: unknown): ConverseEvent => {
+            logger.error('Error processing AI stream', {
+                sessionId,
+                ...serializeError(error),
+            })
+            this.runCommand(sessionId, 'pop-message')
+
+            const message = error instanceof Error
+                ? error.message
+                : String(error)
+
+            return { type: 'error', message }
+        }
+
         try {
             for await (const part of result.fullStream) {
                 if (part.type === 'text-delta') {
@@ -140,15 +163,19 @@ export class AIService {
 
                 if (part.type === 'tool-call') {
                     yield { type: 'tool-call', toolName: part.toolName }
+                    continue
+                }
+
+                if (part.type === 'error') {
+                    yield handleStreamFailure(part.error)
+                    return
                 }
             }
 
             this.runCommand(sessionId, 'append-message', { message: { role: 'assistant', content: assistantText } })
             //FIXME: tool call messages should be added to the session history as well
         } catch (error) {
-            logger.error('Error processing AI stream', { sessionId, error })
-            this.runCommand(sessionId, 'pop-message')
-            throw error
+            yield handleStreamFailure(error)
         }
     }
 
@@ -193,89 +220,6 @@ export class AIService {
         return sessionId
     }
 
-    /**
-     * Skill Discovery
-     * 
-     * Currently limited to built-in skills using the local filesystem.
-     * Can be easily expanded with remote skill discovery (e.g. from an API).
-     */
-    private static discoverSkills(): Map<string, Skill> {
-        const skills: Map<string, Skill> = new Map()
-        const skillsRoot = join(import.meta.dirname, 'skills')
-
-        const files = scanDirectory(skillsRoot, 'SKILL.md')
-        for (const file of files) {
-            const name = file.split('/').shift() ?? 'unknown'
-            const content = readFileSync(file, 'utf8')
-
-            const frontmatter = AIService.parseSkillFrontmatter(content)
-            const body = AIService.stripSkillFrontmatter(content)
-            const resourcePaths = AIService.extractResourcePaths(body)
-
-            skills.set(name, {
-                name,
-                description: frontmatter.description,
-                body, // skill content eagerly loaded into memory but could be deferred to activation time
-                allowedTools: frontmatter.allowedTools as ToolName[],
-                resourcePaths,
-            });
-        }
-
-        return skills
-    }
-
-    //TODO: Move to skills utils, add unit tests. Same goes for parseSkillFrontmatter, stripSkillFrontmatter
-    private static extractResourcePaths(body: string): string[] {
-        const withoutCodeBlocks = body.replace(/```[\s\S]*?```/g, '')
-        const linkPattern = /\[([^\]]*)\]\(([^)]+)\)/g
-        const paths = new Set<string>()
-
-        for (const match of withoutCodeBlocks.matchAll(linkPattern)) {
-            const rawPath = match[2]?.trim()
-
-            if (rawPath === undefined || rawPath === '') {
-                continue
-            }
-
-            if (
-                rawPath.startsWith('#')
-                || rawPath.startsWith('http://')
-                || rawPath.startsWith('https://')
-                || rawPath.startsWith('mailto:')
-                || rawPath.startsWith('tel:')
-            ) {
-                continue
-            }
-
-            const normalizedPath = rawPath.replace(/^\.\//, '')
-
-            if (normalizedPath.includes('..')) {
-                continue
-            }
-
-            paths.add(normalizedPath)
-        }
-
-        return Array.from(paths)
-    }
-
-    /**
-     * Sourced from: https://ai-sdk.dev/cookbook/guides/agent-skills
-     */
-    private static parseSkillFrontmatter(content: string) {
-        const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)
-        if (!match?.[1]) throw new Error('No frontmatter found')
-        return parse(match[1])
-    }
-
-    /**
-     * Sourced from: https://ai-sdk.dev/cookbook/guides/agent-skills
-     */
-    private static stripSkillFrontmatter(content: string) {
-        const match = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/)
-        return match ? content.slice(match[0].length).trim() : content.trim()
-    }
-
     private static getActiveTools(
         context: AgentContext,
         skills: Map<string, Skill>,
@@ -291,6 +235,7 @@ export class AIService {
             result.add('read_skill_resource')
         }
 
+        logger.info(`AI Service::getActiveTools | Determined active tools for step.`, { tools: Array.from(result) })
         return Array.from(result)
     }
 }

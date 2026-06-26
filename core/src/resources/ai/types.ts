@@ -44,6 +44,7 @@ export type ToolSet = {
 export type ConverseEvent =
     | { type: 'text-delta'; text: string }
     | { type: 'tool-call'; toolName: string }
+    | { type: 'error'; message: string }
 
 export interface ConverseInput {
     playerId: string
@@ -63,3 +64,55 @@ export const CallOptionsSchema = z.object({
     activatedSkills: z.set(z.string()),
     playerId: z.string(),
 })
+
+/**
+ * Generic Sandbox Abstraction for enabling Agent Skills interactions across environments (local, cloud, hybrid).
+ * 
+ * Inspired by the `Sandbox` interface in the AI SDK by Vercel.
+ * Sandbox usage should always be encapsulated in a tool.
+ * 
+ * ## Usage
+ * 
+ * ```typescript
+ * 
+ * // Using the user's local filesystem as the sandbox environment
+ * const sandbox = new LocalSandbox('home/user');
+ * 
+ * const execTool = tool({
+ *     description: 'Executes a command',
+ *     inputSchema: z.object({
+ *         command: z.string(),
+ *         args: z.array(z.string()),
+ *     }),
+ *     execute: async ({ command, args }) => {
+ *         return await sandbox.exec(command, args);
+ *     }
+ * })
+ * ```
+ */
+export interface Sandbox {
+    /**
+     * Useful for activating skills and loading skill resources
+     */
+    readFile(path: string, encoding: BufferEncoding): Promise<string>
+
+    /**
+     * Useful for activating skills and loading skill resources
+     */
+    readDir(path: string, content: string, encoding: BufferEncoding): Promise<string[]>
+
+    /** 
+     * For executing inline commands.
+     * 
+     * Separation of args allows for sanitization of command arguments.
+     * Implementations can enforce command type narrowing, e.g. bash, npx.
+     */
+    exec(command: string, args?: string[]): Promise<any>
+
+    /**
+     * For executing self-contained scripts.
+     * 
+     * Implementations can enforce script type narrowing, e.g. bash, npx.
+     */
+    execFile(path: string, args?: string[]): Promise<any>
+}

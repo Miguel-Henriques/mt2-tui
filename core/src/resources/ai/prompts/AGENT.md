@@ -106,7 +106,7 @@ Do NOT invoke this tool if there isn't any skill description fitting for the use
 
 ### `read_skill_resource(path: string)`
 
-//TODO:
+Use WHEN you determine you need or are instructed to read the contents of a file that is referenced by its file path.
 
 ### `search_mob_spots(minLevel: number, maxLevel: number)`
 
